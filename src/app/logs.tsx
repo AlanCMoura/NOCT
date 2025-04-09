@@ -74,7 +74,10 @@ export default function Logs() {
       setSidebarOpen(false);
     }
   };
-
+  const handleadd = () => {
+    // You could add validation logic here
+    router.push('/add');
+  };
   useEffect(() => {
     translateX.setValue(sidebarOpen ? 0 : -sidebarWidth);
     overlayOpacity.setValue(sidebarOpen ? 1 : 0);
@@ -162,7 +165,7 @@ export default function Logs() {
           />
         </View>
         {/* Botão Flutuante */}
-        <TouchableOpacity style={styles.floatingButton}>
+        <TouchableOpacity style={styles.floatingButton} onPress={handleadd}>
           <Text style={styles.floatingButtonText}>+</Text>
         </TouchableOpacity>
       </View>
