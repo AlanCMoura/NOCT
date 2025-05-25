@@ -166,7 +166,7 @@ export default function LoginScreen() {
                     <Text className="text-sm text-gray-600">
                       Não possui uma conta ainda?{' '}
                     </Text>
-                    <TouchableOpacity >
+                    <TouchableOpacity onPress={() => router.push('/register')}>
                       <Text className="text-sm font-medium text-indigo-600">Cadastre-se</Text>
                     </TouchableOpacity>
                   </View>

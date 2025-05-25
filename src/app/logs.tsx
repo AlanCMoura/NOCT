@@ -1,12 +1,14 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, SafeAreaView, Animated, TouchableWithoutFeedback, TextInput, FlatList, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, SafeAreaView, Animated, TextInput, FlatList, StyleSheet } from 'react-native';
 import { Svg, Path } from 'react-native-svg';
 import { cssInterop } from 'nativewind';
-import sombra from "./images/style"
+import sombra from "./images/style";
 import users from "./results";
-import ListItem from "./components/operations"
+import ListItem from "./components/operations";
 import FilterButton from './components/filter';
+import Sidebar from './components/sidebar';
 import { router } from 'expo-router';
+import ItemDetailModal from './components/details'; // Importe o modal
 
 // Interop para permitir o uso de classes Tailwind em componentes React Native
 cssInterop(View, { className: 'style' });
@@ -15,17 +17,31 @@ cssInterop(TouchableOpacity, { className: 'style' });
 cssInterop(ScrollView, { className: 'style' });
 cssInterop(SafeAreaView, { className: 'style' });
 cssInterop(Animated.View, { className: 'style' });
-cssInterop(TouchableWithoutFeedback, { className: 'style' });
+
+// Define the type for search field
+type SearchField = 'operacao' | 'container';
+
+// Define a type for your user items if not already defined elsewhere
+interface UserItem {
+  operacao: string;
+  container: string;
+  qtde_fotos: string;
+  // Add other properties from your users object as needed
+  [key: string]: any;
+}
 
 export default function Logs() {
   const [searchField, setSearchField] = useState<SearchField>('operacao');
-  type SearchField = 'operacao' | 'container';
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState<boolean>(false);
   const translateX = useRef(new Animated.Value(-256)).current;
   const overlayOpacity = useRef(new Animated.Value(0)).current;
   const sidebarWidth = 256;
-  const [searchText, setSearchText] = useState('');
-  const [list, setList] = useState(users);
+  const [searchText, setSearchText] = useState<string>('');
+  const [list, setList] = useState<UserItem[]>(users);
+  
+  // Estados para o modal
+  const [isModalVisible, setIsModalVisible] = useState<boolean>(false);
+  const [selectedItem, setSelectedItem] = useState<UserItem | null>(null);
   
   useEffect(() => {
     if (searchText === '') {
@@ -39,7 +55,8 @@ export default function Logs() {
       );
     }
   }, [searchText, searchField]);
-
+  
+  /* sidebar effect */
   const toggleSidebar = () => {
     Animated.parallel([
       Animated.timing(translateX, {
@@ -56,28 +73,23 @@ export default function Logs() {
 
     setSidebarOpen(!sidebarOpen);
   };
-  const closeSidebar = () => {
-    if (sidebarOpen) {
-      Animated.parallel([
-        Animated.timing(translateX, {
-          toValue: -sidebarWidth,
-          duration: 300,
-          useNativeDriver: true,
-        }),
-        Animated.timing(overlayOpacity, {
-          toValue: 0,
-          duration: 300,
-          useNativeDriver: true,
-        }),
-      ]).start();
 
-      setSidebarOpen(false);
-    }
-  };
-  const handleadd = () => {
-    // You could add validation logic here
+  const handleAdd = () => {
     router.push('/add');
   };
+  
+  // Função para abrir o modal com os detalhes do item
+  const handleItemPress = (item: UserItem) => {
+    setSelectedItem(item);
+    setIsModalVisible(true);
+  };
+  
+  // Função para fechar o modal
+  const handleCloseModal = () => {
+    setIsModalVisible(false);
+  };
+  
+  /* sidebar effect */
   useEffect(() => {
     translateX.setValue(sidebarOpen ? 0 : -sidebarWidth);
     overlayOpacity.setValue(sidebarOpen ? 1 : 0);
@@ -97,38 +109,18 @@ export default function Logs() {
             </Svg>
           </TouchableOpacity>
         </View>
-        {/* Animated Overlay */}
-        <Animated.View
-          className="absolute w-full h-full bg-black/30 z-30"
-          style={{ opacity: overlayOpacity, pointerEvents: sidebarOpen ? 'auto' : 'none' }}
-        >
-          <TouchableWithoutFeedback onPress={closeSidebar}>
-            <View className="w-full h-full" />
-          </TouchableWithoutFeedback>
-        </Animated.View>
 
-        {/* Sidebar */}
-        <Animated.View
-          className="absolute left-0 w-64 h-full bg-gray-50 z-40 shadow-lg mt-7"
-          style={{ transform: [{ translateX: translateX }] }}
-        >
-          <ScrollView className="h-full px-3 py-4">
-            <View className="my-2">
-              {/* Operações */}
-              <TouchableOpacity className="flex-row items-center p-2 rounded-lg mb-2 bg-white hover:bg-slate-400">
-                <KanbanIcon />
-                <Text className="ml-3 text-base font-medium text-gray-900 flex-1">Operações</Text>
-              </TouchableOpacity>
+        {/* Sidebar Component */}
+        <Sidebar 
+          sidebarOpen={sidebarOpen}
+          setSidebarOpen={setSidebarOpen}
+          translateX={translateX}
+          overlayOpacity={overlayOpacity}
+          sidebarWidth={sidebarWidth}
+          activeOption="operations"
+        />
 
-              {/* Sign Up */}
-              <TouchableOpacity className="flex-row items-center p-2 rounded-lg mb-2">
-                <SignUpIcon />
-                <Text className="ml-3 text-base font-medium text-gray-900 flex-1">Sign Up</Text>
-              </TouchableOpacity>
-            </View>
-          </ScrollView>
-        </Animated.View>
-        <View className='mt-6 bg-white w-full flex-row'>
+        <View className='ml-2 mt-6 bg-white w-full flex-row'>
           <TextInput
             placeholder={`Pesquise por ${searchField === 'operacao' ? 'operação' : 'container'}`}
             placeholderTextColor="#888"
@@ -148,10 +140,15 @@ export default function Logs() {
             currentFilterField={searchField}
           />
         </View>
-        <View className=' bg-white w-full flex-1 items-center'>
+        <View className='bg-white w-full flex-1 items-center'>
           <FlatList
             data={list}
-            renderItem={({ item }) => <ListItem data={item} />}
+            renderItem={({ item }) => (
+              <ListItem 
+                data={item} 
+                onPress={handleItemPress}
+              />
+            )}
             keyExtractor={(item) => item.operacao.toString()}
             className="flex-1"
             contentContainerStyle={{ paddingBottom: 20 }}
@@ -164,33 +161,22 @@ export default function Logs() {
             )}
           />
         </View>
+        
+        {/* Modal de Detalhes */}
+        <ItemDetailModal
+          isVisible={isModalVisible}
+          onClose={handleCloseModal}
+          item={selectedItem}
+        />
+        
         {/* Botão Flutuante */}
-        <TouchableOpacity style={styles.floatingButton} onPress={handleadd}>
+        <TouchableOpacity style={styles.floatingButton} onPress={handleAdd}>
           <Text style={styles.floatingButtonText}>+</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
   );
 }
-
-// Icons Components (mesmo do exemplo anterior)
-const KanbanIcon = () => (
-  <Svg width={20} height={25} viewBox="3 0 20 20" fill="#000000">
-    <Path
-      fillRule="evenodd"
-      d="M8 3a1 1 0 011-1h6a1 1 0 011 1h2a2 2 0 012 2v15a2 2 0 01-2 2H6a2 2 0 01-2-2V5a2 2 0 012-2h2zm6 1h-4v2H9a1 1 0 000 2h6a1 1 0 100-2h-1V4zm-3 8a1 1 0 011-1h3a1 1 0 110 2h-3a1 1 0 01-1-1zm-2-1a1 1 0 100 2h.01a1 1 0 100-2H9zm2 5a1 1 0 011-1h3a1 1 0 110 2h-3a1 1 0 01-1-1zm-2-1a1 1 0 100 2h.01a1 1 0 100-2H9z"
-      clipRule="evenodd"
-    />
-  </Svg>
-);
-
-const SignUpIcon = () => (
-  <Svg width={20} height={20} viewBox="0 0 20 20" fill="#000000">
-    <Path d="M5 5V.13a2.96 2.96 0 0 0-1.293.749L.879 3.707A2.96 2.96 0 0 0 .13 5H5Z" />
-    <Path d="M6.737 11.061a2.961 2.961 0 0 1 .81-1.515l6.117-6.116A4.839 4.839 0 0 1 16 2.141V2a1.97 1.97 0 0 0-1.933-2H7v5a2 2 0 0 1-2 2H0v11a1.969 1.969 0 0 0 1.933 2h12.134A1.97 1.97 0 0 0 16 18v-3.093l-1.546 1.546c-.413.413-.94.695-1.513.81l-3.4.679a2.947 2.947 0 0 1-1.85-.227 2.96 2.96 0 0 1-1.635-3.257l.681-3.397Z" />
-    <Path d="M8.961 16a.93.93 0 0 0 .189-.019l3.4-.679a.961.961 0 0 0 .49-.263l6.118-6.117a2.884 2.884 0 0 0-4.079-4.078l-6.117 6.117a.96.96 0 0 0-.263.491l-.679 3.4A.961.961 0 0 0 8.961 16Zm7.477-9.8a.958.958 0 0 1 .68-.281.961.961 0 0 1 .682 1.644l-.315.315-1.36-1.36.313-.318Zm-5.911 5.911 4.236-4.236 1.359 1.359-4.236 4.237-1.7.339.341-1.699Z" />
-  </Svg>
-);
 
 const styles = StyleSheet.create({
   floatingButton: {
