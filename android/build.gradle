@@ -13,13 +13,9 @@ buildscript {
     repositories {
         google()
         mavenCentral()
-        maven {
-          // expo-camera bundles a custom com.google.android:cameraview
-          url "$rootDir/../node_modules/expo-camera/android/maven"
-      }
     }
     dependencies {
-        classpath("com.android.tools.build:gradle:8.6.0")
+        classpath('com.android.tools.build:gradle')
         classpath('com.facebook.react:react-native-gradle-plugin')
         classpath('org.jetbrains.kotlin:kotlin-gradle-plugin')
     }

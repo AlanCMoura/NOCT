@@ -8,7 +8,7 @@ import ListItem from "./components/operations";
 import FilterButton from './components/filter';
 import Sidebar from './components/sidebar';
 import { router } from 'expo-router';
-import ItemDetailModal from './components/details'; // Importe o modal
+import ItemDetailModal from './components/details';
 
 // Interop para permitir o uso de classes Tailwind em componentes React Native
 cssInterop(View, { className: 'style' });
@@ -43,35 +43,46 @@ export default function Logs() {
   const [isModalVisible, setIsModalVisible] = useState<boolean>(false);
   const [selectedItem, setSelectedItem] = useState<UserItem | null>(null);
   
+  // Efeito para filtrar lista baseado no texto de busca
   useEffect(() => {
     if (searchText === '') {
       setList(users);
     } else {
-      setList(
-        users.filter(
-          (item) =>
-            item[searchField].toLowerCase().includes(searchText.toLowerCase())
-        )
-      );
+      const filteredList = users.filter((item) => {
+        const fieldValue = item[searchField];
+        // Verificação adicional para garantir que o campo existe e é uma string
+        return fieldValue && 
+               typeof fieldValue === 'string' && 
+               fieldValue.toLowerCase().includes(searchText.toLowerCase());
+      });
+      setList(filteredList);
     }
   }, [searchText, searchField]);
   
+  // Inicialização do sidebar
+  useEffect(() => {
+    translateX.setValue(-sidebarWidth);
+    overlayOpacity.setValue(0);
+  }, []);
+  
   /* sidebar effect */
   const toggleSidebar = () => {
+    const newSidebarState = !sidebarOpen;
+    
     Animated.parallel([
       Animated.timing(translateX, {
-        toValue: sidebarOpen ? -sidebarWidth : 0,
+        toValue: newSidebarState ? 0 : -sidebarWidth,
         duration: 300,
         useNativeDriver: true,
       }),
       Animated.timing(overlayOpacity, {
-        toValue: sidebarOpen ? 0 : 1,
+        toValue: newSidebarState ? 1 : 0,
         duration: 300,
         useNativeDriver: true,
       }),
     ]).start();
 
-    setSidebarOpen(!sidebarOpen);
+    setSidebarOpen(newSidebarState);
   };
 
   const handleAdd = () => {
@@ -87,18 +98,13 @@ export default function Logs() {
   // Função para fechar o modal
   const handleCloseModal = () => {
     setIsModalVisible(false);
+    setSelectedItem(null); // Limpa o item selecionado
   };
-  
-  /* sidebar effect */
-  useEffect(() => {
-    translateX.setValue(sidebarOpen ? 0 : -sidebarWidth);
-    overlayOpacity.setValue(sidebarOpen ? 1 : 0);
-  }, []);
 
   return (
     <SafeAreaView className="flex-1 bg-white">
       <View className="flex-1 flex-col">
-        {/* Mobile Toggle Button */}
+        {/* Header */}
         <View className='w-full h-28 bg-indigo-400 shadow-lg' style={sombra.shadow}>
           <TouchableOpacity
             className="absolute p-2 mt-12 ml-3 z-10"
@@ -120,13 +126,14 @@ export default function Logs() {
           activeOption="operations"
         />
 
-        <View className='ml-2 mt-6 bg-white w-full flex-row'>
+        {/* Search Bar */}
+        <View className='ml-2 mt-6 bg-white w-full flex-row items-center'>
           <TextInput
             placeholder={`Pesquise por ${searchField === 'operacao' ? 'operação' : 'container'}`}
             placeholderTextColor="#888"
             value={searchText}
-            onChangeText={(t) => setSearchText(t)}
-            className="bg-gray-50 border border-gray-300 text-gray-900 rounded-lg px-3 py-2.5 w-80 mb-6 mt-3 ml-7"
+            onChangeText={setSearchText}
+            className="bg-gray-50 border border-gray-300 text-gray-900 rounded-lg px-3 py-2.5 flex-1 mr-4 ml-7"
             style={{
               shadowColor: "#000",
               shadowOffset: { width: 0, height: 1 },
@@ -135,12 +142,16 @@ export default function Logs() {
               elevation: 2,
             }}
           />
-          <FilterButton
-            onFilterChange={setSearchField}
-            currentFilterField={searchField}
-          />
+          <View className="mr-4">
+            <FilterButton
+              onFilterChange={setSearchField}
+              currentFilterField={searchField}
+            />
+          </View>
         </View>
-        <View className='bg-white w-full flex-1 items-center'>
+
+        {/* Lista */}
+        <View className='bg-white w-full flex-1 items-center mt-4'>
           <FlatList
             data={list}
             renderItem={({ item }) => (
@@ -149,9 +160,9 @@ export default function Logs() {
                 onPress={handleItemPress}
               />
             )}
-            keyExtractor={(item) => item.operacao.toString()}
-            className="flex-1"
-            contentContainerStyle={{ paddingBottom: 20 }}
+            keyExtractor={(item, index) => `${item.operacao}-${index}`}
+            className="flex-1 w-full"
+            contentContainerStyle={{ paddingBottom: 100 }} // Espaço para o botão flutuante
             showsVerticalScrollIndicator={false}
             ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
             ListEmptyComponent={() => (
@@ -163,11 +174,13 @@ export default function Logs() {
         </View>
         
         {/* Modal de Detalhes */}
-        <ItemDetailModal
-          isVisible={isModalVisible}
-          onClose={handleCloseModal}
-          item={selectedItem}
-        />
+        {selectedItem && (
+          <ItemDetailModal
+            isVisible={isModalVisible}
+            onClose={handleCloseModal}
+            item={selectedItem}
+          />
+        )}
         
         {/* Botão Flutuante */}
         <TouchableOpacity style={styles.floatingButton} onPress={handleAdd}>
@@ -181,7 +194,7 @@ export default function Logs() {
 const styles = StyleSheet.create({
   floatingButton: {
     position: 'absolute',
-    bottom: 20,
+    bottom: 30,
     right: 20,
     backgroundColor: '#4f46e5',
     width: 60,
@@ -189,14 +202,16 @@ const styles = StyleSheet.create({
     borderRadius: 30,
     justifyContent: 'center',
     alignItems: 'center',
-    elevation: 5,
+    elevation: 8,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
-    shadowRadius: 2,
+    shadowRadius: 4,
+    zIndex: 1000,
   },
   floatingButtonText: {
     color: 'white',
     fontSize: 24,
+    fontWeight: 'bold',
   },
 });
