@@ -30,6 +30,11 @@ const SignUpIcon = () => (
   </Svg>
 );
 
+const Users = ({ width = 20, height = 20, fill = "#000000" }) => (
+  <Svg width={width} height={height} viewBox="0 0 512 512" fill={fill}>
+    <Path d="M256 288c79.5 0 144-64.5 144-144S335.5 0 256 0 112 64.5 112 144s64.5 144 144 144zm128 32h-55.1c-22.2 10.2-46.9 16-72.9 16s-50.6-5.8-72.9-16H128C57.3 320 0 377.3 0 448v16c0 26.5 21.5 48 48 48h416c26.5 0 48-21.5 48-48v-16c0-70.7-57.3-128-128-128z" />
+  </Svg>
+);
 // Define sidebar menu options type
 export type SidebarMenuOption = 'operations' | 'signup';
 
@@ -100,7 +105,7 @@ const Sidebar: React.FC<SidebarProps> = ({
           <View className="my-2">
             {/* Operações */}
             <TouchableOpacity 
-              className={`flex-row items-center p-2 rounded-lg mb-2 ${
+              className={`flex-row items-center p-3 rounded-lg mb-2 ${
                 activeOption === 'operations' 
                   ? 'bg-indigo-100 border border-indigo-300' 
                   : 'bg-white hover:bg-slate-100'
@@ -115,11 +120,28 @@ const Sidebar: React.FC<SidebarProps> = ({
               >
                 Operações
               </Text>
+            </TouchableOpacity> 
+            {/* Users */}
+            <TouchableOpacity 
+              className={`flex-row items-center p-3 rounded-lg mb-2 ${
+                activeOption === 'signup' 
+                  ? 'bg-indigo-100 border border-indigo-300' 
+                  : 'bg-white hover:bg-slate-100'
+              }`}
+              onPress={() => handleOptionPress('signup')}
+            >
+              <Users />
+              <Text 
+                className={`ml-3 text-base font-medium flex-1 ${
+                  activeOption === 'signup' ? 'text-indigo-700' : 'text-gray-900'
+                }`}
+              >
+                Inspetores
+              </Text>
             </TouchableOpacity>
-
             {/* Sign Up */}
             <TouchableOpacity 
-              className={`flex-row items-center p-2 rounded-lg mb-2 ${
+              className={`flex-row items-center p-3 rounded-lg mb-2 ${
                 activeOption === 'signup' 
                   ? 'bg-indigo-100 border border-indigo-300' 
                   : 'bg-white hover:bg-slate-100'
@@ -135,6 +157,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                 Sign Up
               </Text>
             </TouchableOpacity>
+            
           </View>
         </ScrollView>
       </Animated.View>
