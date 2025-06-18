@@ -85,8 +85,8 @@ export default function Logs() {
     setSidebarOpen(newSidebarState);
   };
 
-  const handleAdd = () => {
-    router.push('/add');
+  const handleForm = () => {
+    router.push('/form');
   };
   
   // Função para abrir o modal com os detalhes do item
@@ -183,7 +183,7 @@ export default function Logs() {
         )}
         
         {/* Botão Flutuante */}
-        <TouchableOpacity style={styles.floatingButton} onPress={handleAdd}>
+        <TouchableOpacity style={styles.floatingButton} onPress={handleForm}>
           <Text style={styles.floatingButtonText}>+</Text>
         </TouchableOpacity>
       </View>
