@@ -2,13 +2,13 @@ import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, SafeAreaView, Animated, TextInput, FlatList, StyleSheet } from 'react-native';
 import { Svg, Path } from 'react-native-svg';
 import { cssInterop } from 'nativewind';
-import sombra from "./images/style";
+import sombra from "../images/style";
 import users from "./results";
-import ListItem from "./components/operations";
-import FilterButton from './components/filter';
-import Sidebar from './components/sidebar';
+import ListItem from "../components/operations";
+import FilterButton from '../components/filter';
+import Sidebar from '../components/sidebar';
 import { router } from 'expo-router';
-import ItemDetailModal from './components/details';
+import ItemDetailModal from '../components/details';
 
 // Interop para permitir o uso de classes Tailwind em componentes React Native
 cssInterop(View, { className: 'style' });
@@ -86,7 +86,7 @@ export default function Logs() {
   };
 
   const handleForm = () => {
-    router.push('/form');
+    router.push('/main/form');
   };
   
   // Função para abrir o modal com os detalhes do item

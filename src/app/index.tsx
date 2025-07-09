@@ -14,9 +14,12 @@ import {
   Keyboard,
   Switch,
   StatusBar,
+  Alert,
+  ActivityIndicator, // ← ADICIONAR
 } from 'react-native';
 import { cssInterop } from "nativewind";
 import { LinearGradient } from 'expo-linear-gradient';
+import { useAuth } from './contexts/AuthContext'; // ← ADICIONAR IMPORT
 
 // Aplicando cssInterop para todos os componentes que vamos estilizar
 cssInterop(Text, {
@@ -65,10 +68,25 @@ cssInterop(LinearGradient, {
   },
 });
 
+interface Errors {
+  cpf?: string;
+  password?: string;
+}
+
+interface LoginResponse {
+  cpf: string;
+  requiresTwoFactor: boolean;
+  token: string;
+}
+
 export default function LoginScreen() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [rememberLogin, setRememberLogin] = useState(false);
+  const [cpf, setCpf] = useState<string>('');
+  const [password, setPassword] = useState<string>('');
+  const [rememberLogin, setRememberLogin] = useState<boolean>(false);
+  const [errors, setErrors] = useState<Errors>({});
+  
+  // ← USAR CONTEXT em vez de estados locais
+  const { login, isLoading } = useAuth();
 
   // Configure status bar to match gradient background
   useEffect(() => {
@@ -79,10 +97,122 @@ export default function LoginScreen() {
     }
   }, []);
 
-  // Handle login navigation
-  const handlelogs = () => {
-    // You could add validation logic here
-    router.push('/logs');
+  // Função para formatar CPF
+  const formatCPF = (text: string): string => {
+    const numbers = text.replace(/\D/g, '');
+    return numbers
+      .replace(/(\d{3})(\d)/, '$1.$2')
+      .replace(/(\d{3})(\d)/, '$1.$2')
+      .replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+  };
+
+  // Função para validar CPF
+  const validateCPF = (cpf: string): boolean => {
+    const cleanCPF = cpf.replace(/\D/g, '');
+    
+    if (cleanCPF.length !== 11) {
+      return false;
+    }
+
+    // Verifica se todos os dígitos são iguais
+    if (/^(\d)\1{10}$/.test(cleanCPF)) {
+      return false;
+    }
+
+    // Validação do primeiro dígito verificador
+    let sum = 0;
+    for (let i = 0; i < 9; i++) {
+      sum += parseInt(cleanCPF.charAt(i)) * (10 - i);
+    }
+    let remainder = (sum * 10) % 11;
+    if (remainder === 10 || remainder === 11) remainder = 0;
+    if (remainder !== parseInt(cleanCPF.charAt(9))) return false;
+
+    // Validação do segundo dígito verificador
+    sum = 0;
+    for (let i = 0; i < 10; i++) {
+      sum += parseInt(cleanCPF.charAt(i)) * (11 - i);
+    }
+    remainder = (sum * 10) % 11;
+    if (remainder === 10 || remainder === 11) remainder = 0;
+    if (remainder !== parseInt(cleanCPF.charAt(10))) return false;
+
+    return true;
+  };
+
+  // Função para validar senha
+  const validatePassword = (password: string): boolean => {
+    const hasMinLength = password.length >= 8;
+    const hasLetter = /[a-zA-Z]/.test(password);
+    const hasNumber = /\d/.test(password);
+    
+    return hasMinLength && hasLetter && hasNumber;
+  };
+
+  // Função para validar formulário
+  const validateForm = (): boolean => {
+    const newErrors: Errors = {};
+
+    // Validação do CPF - DESABILITADA
+    if (!cpf.trim()) {
+      newErrors.cpf = 'CPF é obrigatório';
+    } 
+    // ❌ Validação de CPF desabilitada temporariamente
+    // else if (!validateCPF(cpf)) {
+    //   newErrors.cpf = 'CPF inválido';
+    // }
+
+    // Validação da senha
+    if (!password.trim()) {
+      newErrors.password = 'Senha é obrigatória';
+    } else if (!validatePassword(password)) {
+      newErrors.password = 'Senha deve ter pelo menos 8 caracteres, 1 letra e 1 número';
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  // Handle CPF input change
+  const handleCPFChange = (text: string): void => {
+    const formattedCPF = formatCPF(text);
+    setCpf(formattedCPF);
+    
+    // Limpa erro do CPF quando usuário começa a digitar
+    if (errors.cpf) {
+      setErrors(prev => ({ ...prev, cpf: undefined }));
+    }
+  };
+
+  // Handle password input change
+  const handlePasswordChange = (text: string): void => {
+    setPassword(text);
+    
+    // Limpa erro da senha quando usuário começa a digitar
+    if (errors.password) {
+      setErrors(prev => ({ ...prev, password: undefined }));
+    }
+  };
+
+  // Handle login navigation - SIMPLIFICADO
+  const handlelogs = async (): Promise<void> => {
+    if (validateForm()) {
+      // Usa a função login do Context
+      const success = await login(cpf, password);
+      
+      // Se login foi bem-sucedido, o Context já navega automaticamente
+      // Se falhou, o Context já mostra o erro
+      if (!success) {
+        // Limpa a senha em caso de erro
+        setPassword('');
+      }
+    } else {
+      // Mostra primeiro erro encontrado
+      const firstError = Object.values(errors)[0];
+      if (firstError) {
+        Alert.alert('Erro de validação', firstError);
+      }
+    }
   };
 
   return (
@@ -115,28 +245,35 @@ export default function LoginScreen() {
                 
                 <View className="space-y-4">
                   <View>
-                    <Text className="text-sm font-medium text-gray-700 mb-2">Email</Text>
+                    <Text className="text-sm font-medium text-gray-700 mb-2">CPF</Text>
                     <TextInput
-                      className="bg-gray-50 border border-gray-300 text-gray-900 rounded-lg px-3 py-2.5 w-full"
-                      placeholder="nome@exemplo.com"
+                      className={`bg-gray-50 border ${errors.cpf ? 'border-red-500' : 'border-gray-300'} text-gray-900 rounded-lg px-3 py-2.5 w-full`}
+                      placeholder="000.000.000-00"
                       placeholderTextColor="#A0AEC0"
-                      value={email}
-                      onChangeText={setEmail}
-                      keyboardType="email-address"
+                      value={cpf}
+                      onChangeText={handleCPFChange}
+                      keyboardType="numeric"
+                      maxLength={14}
                       autoCapitalize="none"
                     />
+                    {errors.cpf && (
+                      <Text className="text-red-500 text-xs mt-1">{errors.cpf}</Text>
+                    )}
                   </View>
                   
                   <View>
                     <Text className="text-sm font-medium text-gray-700 mb-2 mt-5">Senha</Text>
                     <TextInput
-                      className="bg-gray-50 border border-gray-300 text-gray-900 rounded-lg px-3 py-2.5 w-full"
+                      className={`bg-gray-50 border ${errors.password ? 'border-red-500' : 'border-gray-300'} text-gray-900 rounded-lg px-3 py-2.5 w-full`}
                       placeholder="••••••••"
                       placeholderTextColor="#A0AEC0"
                       value={password}
-                      onChangeText={setPassword}
+                      onChangeText={handlePasswordChange}
                       secureTextEntry
                     />
+                    {errors.password && (
+                      <Text className="text-red-500 text-xs mt-1">{errors.password}</Text>
+                    )}
                   </View>
                   
                   <View className="flex-row justify-between items-center mt-5">
@@ -155,11 +292,16 @@ export default function LoginScreen() {
                   </View>
                   
                   <TouchableOpacity
-                    className="w-full bg-indigo-600 hover:bg-indigo-700 rounded-lg px-4 py-3 mt-5"
+                    className={`w-full ${isLoading ? 'bg-gray-400' : 'bg-indigo-600 hover:bg-indigo-700'} rounded-lg px-4 py-3 mt-5`}
                     activeOpacity={0.8}
                     onPress={handlelogs}
+                    disabled={isLoading} // Desabilita durante loading
                   >
-                    <Text className="text-white text-center font-semibold">Entrar</Text>
+                    {isLoading ? (
+                      <ActivityIndicator size="small" color="#5a67d8" />
+                    ) : (
+                      <Text className="text-white text-center font-semibold">Entrar</Text>
+                    )}
                   </TouchableOpacity>
                   
                   <View className="flex-row justify-center flex-wrap mt-4">

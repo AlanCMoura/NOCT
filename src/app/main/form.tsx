@@ -93,7 +93,7 @@ export default function Form() {
   };
   const handlelogs = () => {
     // You could add validation logic here
-    router.push('/logs');
+    router.push('/main/logs');
   };
   const takePicture = async () => {
     if (cameraRef.current) {
