@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, Modal, ScrollView, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, Modal, ScrollView, StyleSheet, Image } from 'react-native';
 import { cssInterop } from 'nativewind';
 import { Svg, Path } from 'react-native-svg';
 
@@ -9,17 +9,14 @@ cssInterop(Text, { className: 'style' });
 cssInterop(TouchableOpacity, { className: 'style' });
 cssInterop(ScrollView, { className: 'style' });
 cssInterop(Modal, { className: 'style' });
+cssInterop(Image, { className: 'style' });
 
 // Tipos e interfaces
 interface OperationItem {
   operacao: string;
   container: string;
   qtde_fotos: string;
-  status?: string;
-  data_entrada?: string;
-  data_saida?: string;
-  hora_entrada?: string;
-  hora_saida?: string;
+  images?: string[]; // Array opcional de URLs das imagens
   [key: string]: any;
 }
 
@@ -36,36 +33,22 @@ const CloseIcon = () => (
   </Svg>
 );
 
-// Componente para status indicator
-const StatusIndicator: React.FC<{ status: string }> = ({ status }) => {
-  const getStatusColor = (status: string) => {
-    const normalizedStatus = status.toLowerCase();
-    if (normalizedStatus === 'concluído' || normalizedStatus === 'concluido') return 'bg-green-500';
-    if (normalizedStatus === 'em andamento') return 'bg-yellow-500';
-    return 'bg-gray-500';
-  };
-
-  return (
-    <View className="flex-row items-center mt-1">
-      <View className={`h-3 w-3 rounded-full ${getStatusColor(status)} mr-2`} />
-      <Text className="text-lg font-semibold text-gray-800">{status}</Text>
-    </View>
-  );
-};
+// Componente para ícone de imagem placeholder
+const ImageIcon = () => (
+  <Svg width={48} height={48} viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth={1.5}>
+    <Path d="M21 19V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0-2-2z" />
+    <Path d="M8.5 10a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z" />
+    <Path d="M21 15l-5-5L5 21" />
+  </Svg>
+);
 
 // Componente para badge de disponibilidade de fotos
 const PhotosBadge: React.FC<{ count: string }> = ({ count }) => {
   const photoCount = parseInt(count || '0');
-  const isAvailable = photoCount > 0;
   
   return (
     <View className="flex-row items-center mt-1">
       <Text className="text-lg font-semibold text-gray-800">{count || '0'}</Text>
-      <View className={`ml-2 px-2 py-1 rounded-full ${isAvailable ? 'bg-green-100' : 'bg-red-100'}`}>
-        <Text className={`text-xs ${isAvailable ? 'text-green-700' : 'text-red-700'}`}>
-          {isAvailable ? 'Disponível' : 'Indisponível'}
-        </Text>
-      </View>
     </View>
   );
 };
@@ -83,18 +66,35 @@ const InfoCard: React.FC<{
   </View>
 );
 
-// Componente para card de data/hora
-const DateTimeCard: React.FC<{ 
-  title: string; 
-  date: string; 
-  time?: string; 
-}> = ({ title, date, time }) => (
-  <InfoCard title={title} value={date}>
-    <Text className="text-base font-semibold text-gray-800 mt-1">{date}</Text>
-    {time && <Text className="text-sm text-gray-500 mt-1">{time}</Text>}
-  </InfoCard>
+// Componente para slot de imagem
+const ImageSlot: React.FC<{ 
+  imageUrl?: string; 
+  index: number; 
+  onPress?: () => void;
+}> = ({ imageUrl, index, onPress }) => (
+  <TouchableOpacity 
+    className="bg-gray-100 border border-gray-200 rounded-lg overflow-hidden"
+    style={styles.imageSlot}
+    onPress={onPress}
+    activeOpacity={0.7}
+  >
+    {imageUrl ? (
+      <Image 
+        source={{ uri: imageUrl }} 
+        className="w-full h-full"
+        style={styles.image}
+        resizeMode="cover"
+      />
+    ) : (
+      <View className="w-full h-full items-center justify-center bg-gray-50">
+        <ImageIcon />
+        <Text className="text-xs text-gray-400 mt-1">Foto {index + 1}</Text>
+      </View>
+    )}
+  </TouchableOpacity>
 );
 
+// Componente principal do modal
 const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ isVisible, onClose, item }) => {
   if (!item) return null;
 
@@ -108,10 +108,6 @@ const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ isVisible, onClose, i
     const fieldTitles: Record<string, string> = {
       operacao: 'Operação',
       qtde_fotos: 'Quantidade de Fotos',
-      data_entrada: 'Data de Entrada',
-      data_saida: 'Data de Saída',
-      hora_entrada: 'Hora de Entrada',
-      hora_saida: 'Hora de Saída',
     };
     
     return fieldTitles[key] || key
@@ -121,10 +117,16 @@ const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ isVisible, onClose, i
   };
 
   // Campos prioritários e adicionais
-  const priorityFields = ['operacao', 'container', 'qtde_fotos', 'status', 'data_entrada', 'data_saida'];
+  const priorityFields = ['operacao', 'container', 'qtde_fotos', 'images'];
   const additionalFields = Object.entries(item)
     .filter(([key, value]) => !priorityFields.includes(key) && !isEmpty(value))
     .sort(([a], [b]) => a.localeCompare(b));
+
+  // Handler para pressionar imagem
+  const handleImagePress = (index: number) => {
+    // Aqui você pode implementar a lógica para abrir a imagem em tela cheia
+    console.log(`Imagem ${index + 1} pressionada`);
+  };
 
   return (
     <Modal
@@ -173,61 +175,42 @@ const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ isVisible, onClose, i
                 </InfoCard>
               </View>
             </View>
-            
-            {/* Status */}
-            {!isEmpty(item.status) && (
-              <InfoCard title="Status" value="" className="mb-4 bg-gray-50 border-gray-100">
-                <StatusIndicator status={item.status!} />
-              </InfoCard>
-            )}
-            
-            {/* Datas de entrada e saída */}
-            {(!isEmpty(item.data_entrada) || !isEmpty(item.data_saida)) && (
-              <View className="flex-row mb-4 space-x-2">
-                {!isEmpty(item.data_entrada) && (
-                  <View className="flex-1">
-                    <DateTimeCard 
-                      title="Data de Entrada" 
-                      date={item.data_entrada!} 
-                      time={item.hora_entrada} 
-                    />
-                  </View>
-                )}
+
+            {/* Seção de Imagens */}
+            <View className="mt-6 mb-4">
+              <Text className="mb-4 text-base font-medium text-gray-700">
+                Fotos da Operação
+              </Text>
+              
+              {/* Grid de imagens - 3 em cima, 2 embaixo */}
+              <View className="space-y-3">
+                {/* Primeira linha - 3 imagens */}
+                <View className="flex-row space-x-3">
+                  {[0, 1, 2].map((index) => (
+                    <View key={index} className="flex-1">
+                      <ImageSlot 
+                        imageUrl={item.images?.[index]}
+                        index={index}
+                        onPress={() => handleImagePress(index)}
+                      />
+                    </View>
+                  ))}
+                </View>
                 
-                {!isEmpty(item.data_saida) && (
-                  <View className="flex-1">
-                    <DateTimeCard 
-                      title="Data de Saída" 
-                      date={item.data_saida!} 
-                      time={item.hora_saida} 
-                    />
-                  </View>
-                )}
+                {/* Segunda linha - 2 imagens centralizadas */}
+                <View className="flex-row space-x-3 justify-center">
+                  {[3, 4].map((index) => (
+                    <View key={index} style={styles.bottomImageContainer}>
+                      <ImageSlot 
+                        imageUrl={item.images?.[index]}
+                        index={index}
+                        onPress={() => handleImagePress(index)}
+                      />
+                    </View>
+                  ))}
+                </View>
               </View>
-            )}
-            
-            {/* Informações adicionais */}
-            {additionalFields.length > 0 ? (
-              <>
-                <Text className="mb-3 text-base font-medium text-gray-700">
-                  Informações Adicionais
-                </Text>
-                {additionalFields.map(([key, value]) => (
-                  <View key={key} className="mb-3">
-                    <InfoCard 
-                      title={formatFieldTitle(key)} 
-                      value={String(value)} 
-                    />
-                  </View>
-                ))}
-              </>
-            ) : (
-              <View className="my-4 p-6 bg-gray-50 rounded-lg border border-gray-100 items-center">
-                <Text className="text-gray-500 text-center">
-                  Não há informações adicionais disponíveis
-                </Text>
-              </View>
-            )}
+            </View>
           </ScrollView>
           
           {/* Footer com botão de fechar */}
@@ -259,7 +242,21 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
     shadowRadius: 3,
-  }
+  },
+  imageSlot: {
+    height: 100,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  image: {
+    flex: 1,
+  },
+  bottomImageContainer: {
+    width: '30%',
+  },
 });
 
 export default ItemDetailModal;

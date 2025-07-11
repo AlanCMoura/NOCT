@@ -85,7 +85,7 @@ export default function RegisterScreen() {
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
   // Hooks do contexto de autenticação
-  const { isAuthenticated, isLoading: authLoading, user } = useAuth();
+  const { isAuthenticated, isLoading: authLoading, user, token } = useAuth();
   const authenticatedFetch = useAuthenticatedFetch();
 
   // Verificação de autenticação
@@ -97,12 +97,24 @@ export default function RegisterScreen() {
         [
           {
             text: 'OK',
-            onPress: () => router.replace('/main/logs') // Redireciona para login
+            onPress: () => router.replace('/') // Redireciona para login
           }
         ]
       );
     }
   }, [isAuthenticated, authLoading]);
+
+  // Debug - informações do usuário logado
+  useEffect(() => {
+    if (user && token) {
+      console.log('👤 Usuário logado (RegisterScreen):', {
+        cpf: user.cpf,
+        requiresTwoFactor: user.requiresTwoFactor,
+        tokenPreview: token ? `${token.substring(0, 20)}...` : 'SEM TOKEN',
+        isAuthenticated
+      });
+    }
+  }, [user, token, isAuthenticated]);
 
   // Configure status bar to match gradient background
   useEffect(() => {
@@ -241,7 +253,7 @@ export default function RegisterScreen() {
     const userData = {
       firstName: firstName.trim(),
       lastName: lastName.trim(),
-      cpf: cpf,
+      cpf: cpf, // Envia CPF COM formatação (pontos e traços)
       email: email.trim().toLowerCase(),
       password,
       role,
@@ -276,7 +288,13 @@ export default function RegisterScreen() {
             {
               text: 'Voltar',
               style: 'cancel',
-              onPress: () => router.replace('/main/logs')
+              onPress: () => {
+                if (router.canGoBack()) {
+                  router.back();
+                } else {
+                  router.replace('/main/logs'); // ou sua tela principal
+                }
+              }
             }
           ]
         );
@@ -295,7 +313,7 @@ export default function RegisterScreen() {
           [
             {
               text: 'OK',
-              onPress: () => router.replace('/main/logs')
+              onPress: () => router.replace('/')
             }
           ]
         );
@@ -492,7 +510,13 @@ export default function RegisterScreen() {
                     <TouchableOpacity
                       className="w-full bg-gray-500 hover:bg-gray-600 rounded-lg px-4 py-3 mt-3"
                       activeOpacity={0.8}
-                      onPress={() => router.replace('/main/logs')}
+                      onPress={() => {
+                        if (router.canGoBack()) {
+                          router.back();
+                        } else {
+                          router.replace('/main/logs'); // ou sua tela principal
+                        }
+                      }}
                       disabled={isSubmitting}
                     >
                       <Text className="text-white text-center font-semibold">Voltar</Text>

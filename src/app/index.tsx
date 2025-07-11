@@ -15,11 +15,12 @@ import {
   Switch,
   StatusBar,
   Alert,
-  ActivityIndicator, // ← ADICIONAR
+  ActivityIndicator,
 } from 'react-native';
 import { cssInterop } from "nativewind";
 import { LinearGradient } from 'expo-linear-gradient';
-import { useAuth } from './contexts/AuthContext'; // ← ADICIONAR IMPORT
+import { useAuth } from './contexts/AuthContext';
+import TwoFactorModal from './components/TwoFactorModal'; // Ajuste o caminho
 
 // Aplicando cssInterop para todos os componentes que vamos estilizar
 cssInterop(Text, {
@@ -73,20 +74,14 @@ interface Errors {
   password?: string;
 }
 
-interface LoginResponse {
-  cpf: string;
-  requiresTwoFactor: boolean;
-  token: string;
-}
-
 export default function LoginScreen() {
   const [cpf, setCpf] = useState<string>('');
   const [password, setPassword] = useState<string>('');
   const [rememberLogin, setRememberLogin] = useState<boolean>(false);
   const [errors, setErrors] = useState<Errors>({});
   
-  // ← USAR CONTEXT em vez de estados locais
-  const { login, isLoading } = useAuth();
+  // Hook de autenticação
+  const { login, isLoading, requiresTwoFactor } = useAuth();
 
   // Configure status bar to match gradient background
   useEffect(() => {
@@ -142,7 +137,7 @@ export default function LoginScreen() {
 
   // Função para validar senha
   const validatePassword = (password: string): boolean => {
-    const hasMinLength = password.length >= 8;
+    const hasMinLength = password.length >= 6; // Reduzido para 6 caracteres
     const hasLetter = /[a-zA-Z]/.test(password);
     const hasNumber = /\d/.test(password);
     
@@ -153,11 +148,11 @@ export default function LoginScreen() {
   const validateForm = (): boolean => {
     const newErrors: Errors = {};
 
-    // Validação do CPF - DESABILITADA
+    // Validação do CPF - COMENTADA TEMPORARIAMENTE
     if (!cpf.trim()) {
       newErrors.cpf = 'CPF é obrigatório';
     } 
-    // ❌ Validação de CPF desabilitada temporariamente
+    // ❌ Validação de CPF comentada para testes
     // else if (!validateCPF(cpf)) {
     //   newErrors.cpf = 'CPF inválido';
     // }
@@ -166,7 +161,7 @@ export default function LoginScreen() {
     if (!password.trim()) {
       newErrors.password = 'Senha é obrigatória';
     } else if (!validatePassword(password)) {
-      newErrors.password = 'Senha deve ter pelo menos 8 caracteres, 1 letra e 1 número';
+      newErrors.password = 'Senha deve ter pelo menos 6 caracteres, 1 letra e 1 número';
     }
 
     setErrors(newErrors);
@@ -194,18 +189,16 @@ export default function LoginScreen() {
     }
   };
 
-  // Handle login navigation - SIMPLIFICADO
-  const handlelogs = async (): Promise<void> => {
+  // Handle login
+  const handleLogin = async (): Promise<void> => {
     if (validateForm()) {
-      // Usa a função login do Context
       const success = await login(cpf, password);
       
-      // Se login foi bem-sucedido, o Context já navega automaticamente
-      // Se falhou, o Context já mostra o erro
       if (!success) {
         // Limpa a senha em caso de erro
         setPassword('');
       }
+      // Se requiresTwoFactor for true, o modal abrirá automaticamente
     } else {
       // Mostra primeiro erro encontrado
       const firstError = Object.values(errors)[0];
@@ -213,6 +206,13 @@ export default function LoginScreen() {
         Alert.alert('Erro de validação', firstError);
       }
     }
+  };
+
+  // Handle close 2FA modal
+  const handleClose2FAModal = (): void => {
+    // O modal 2FA já lida com o logout quando necessário
+    // Aqui só precisamos limpar o formulário
+    setPassword('');
   };
 
   return (
@@ -224,101 +224,118 @@ export default function LoginScreen() {
         end={{ x: 1, y: 1 }}
         className="flex-1"
       >
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        className="flex-1"
-      >
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-          <ScrollView className="flex-1">
-            <SafeAreaView className="flex-1 items-center justify-center px-5 py-10">
-              <Image
-                source={require('./images/coruja.png')}
-                className="w-24 h-24 mb-1 mt-20"
-                resizeMode="contain"
-              />
-              <Text className="text-2xl font-bold text-black mb-8">NOCT</Text>
-              
-              <View className="w-full max-w-md bg-white rounded-lg shadow-lg px-6 py-6 mt-6">
-                <Text className="text-xl font-bold text-gray-800 mb-5">
-                  Entre na sua conta
-                </Text>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          className="flex-1"
+        >
+          <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+            <ScrollView className="flex-1">
+              <SafeAreaView className="flex-1 items-center justify-center px-5 py-10">
+                <Image
+                  source={require('./images/coruja.png')}
+                  className="w-24 h-24 mb-1 mt-20"
+                  resizeMode="contain"
+                />
+                <Text className="text-2xl font-bold text-black mb-8">NOCT</Text>
                 
-                <View className="space-y-4">
-                  <View>
-                    <Text className="text-sm font-medium text-gray-700 mb-2">CPF</Text>
-                    <TextInput
-                      className={`bg-gray-50 border ${errors.cpf ? 'border-red-500' : 'border-gray-300'} text-gray-900 rounded-lg px-3 py-2.5 w-full`}
-                      placeholder="000.000.000-00"
-                      placeholderTextColor="#A0AEC0"
-                      value={cpf}
-                      onChangeText={handleCPFChange}
-                      keyboardType="numeric"
-                      maxLength={14}
-                      autoCapitalize="none"
-                    />
-                    {errors.cpf && (
-                      <Text className="text-red-500 text-xs mt-1">{errors.cpf}</Text>
-                    )}
-                  </View>
+                <View className="w-full max-w-md bg-white rounded-lg shadow-lg px-6 py-6 mt-6">
+                  <Text className="text-xl font-bold text-gray-800 mb-5">
+                    Entre na sua conta
+                  </Text>
                   
-                  <View>
-                    <Text className="text-sm font-medium text-gray-700 mb-2 mt-5">Senha</Text>
-                    <TextInput
-                      className={`bg-gray-50 border ${errors.password ? 'border-red-500' : 'border-gray-300'} text-gray-900 rounded-lg px-3 py-2.5 w-full`}
-                      placeholder="••••••••"
-                      placeholderTextColor="#A0AEC0"
-                      value={password}
-                      onChangeText={handlePasswordChange}
-                      secureTextEntry
-                    />
-                    {errors.password && (
-                      <Text className="text-red-500 text-xs mt-1">{errors.password}</Text>
-                    )}
-                  </View>
-                  
-                  <View className="flex-row justify-between items-center mt-5">
-                    <View className="flex-row items-center">
-                      <Switch
-                        value={rememberLogin}
-                        onValueChange={setRememberLogin}
-                        trackColor={{ false: "#E2E8F0", true: "#7F9CF5" }}
-                        thumbColor={rememberLogin ? "#4C51BF" : "#f4f3f4"}
+                  <View className="space-y-4">
+                    <View>
+                      <Text className="text-sm font-medium text-gray-700 mb-2">CPF</Text>
+                      <TextInput
+                        className={`bg-gray-50 border ${errors.cpf ? 'border-red-500' : 'border-gray-300'} text-gray-900 rounded-lg px-3 py-2.5 w-full`}
+                        placeholder="000.000.000-00"
+                        placeholderTextColor="#A0AEC0"
+                        value={cpf}
+                        onChangeText={handleCPFChange}
+                        keyboardType="numeric"
+                        maxLength={14}
+                        autoCapitalize="none"
+                        editable={!isLoading}
                       />
-                      <Text className="ml-2 text-sm text-gray-600">Manter login</Text>
+                      {errors.cpf && (
+                        <Text className="text-red-500 text-xs mt-1">{errors.cpf}</Text>
+                      )}
                     </View>
-                    <TouchableOpacity>
-                      <Text className="text-sm font-medium text-indigo-600">Esqueceu sua senha?</Text>
+                    
+                    <View>
+                      <Text className="text-sm font-medium text-gray-700 mb-2 mt-5">Senha</Text>
+                      <TextInput
+                        className={`bg-gray-50 border ${errors.password ? 'border-red-500' : 'border-gray-300'} text-gray-900 rounded-lg px-3 py-2.5 w-full`}
+                        placeholder="••••••••"
+                        placeholderTextColor="#A0AEC0"
+                        value={password}
+                        onChangeText={handlePasswordChange}
+                        secureTextEntry
+                        editable={!isLoading}
+                      />
+                      {errors.password && (
+                        <Text className="text-red-500 text-xs mt-1">{errors.password}</Text>
+                      )}
+                    </View>
+                    
+                    <View className="flex-row justify-between items-center mt-5">
+                      <View className="flex-row items-center">
+                        <Switch
+                          value={rememberLogin}
+                          onValueChange={setRememberLogin}
+                          trackColor={{ false: "#E2E8F0", true: "#7F9CF5" }}
+                          thumbColor={rememberLogin ? "#4C51BF" : "#f4f3f4"}
+                          disabled={isLoading}
+                        />
+                        <Text className="ml-2 text-sm text-gray-600">Manter login</Text>
+                      </View>
+                      <TouchableOpacity disabled={isLoading}>
+                        <Text className="text-sm font-medium text-indigo-600">
+                          Esqueceu sua senha?
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                    
+                    <TouchableOpacity
+                      className={`w-full ${isLoading ? 'bg-gray-400' : 'bg-indigo-600 hover:bg-indigo-700'} rounded-lg px-4 py-3 mt-5`}
+                      activeOpacity={0.8}
+                      onPress={handleLogin}
+                      disabled={isLoading}
+                    >
+                      {isLoading ? (
+                        <View className="flex-row justify-center items-center">
+                          <ActivityIndicator size="small" color="#FFFFFF" />
+                          <Text className="text-white font-semibold ml-2">Entrando...</Text>
+                        </View>
+                      ) : (
+                        <Text className="text-white text-center font-semibold">Entrar</Text>
+                      )}
                     </TouchableOpacity>
-                  </View>
-                  
-                  <TouchableOpacity
-                    className={`w-full ${isLoading ? 'bg-gray-400' : 'bg-indigo-600 hover:bg-indigo-700'} rounded-lg px-4 py-3 mt-5`}
-                    activeOpacity={0.8}
-                    onPress={handlelogs}
-                    disabled={isLoading} // Desabilita durante loading
-                  >
-                    {isLoading ? (
-                      <ActivityIndicator size="small" color="#5a67d8" />
-                    ) : (
-                      <Text className="text-white text-center font-semibold">Entrar</Text>
-                    )}
-                  </TouchableOpacity>
-                  
-                  <View className="flex-row justify-center flex-wrap mt-4">
-                    <Text className="text-sm text-gray-600">
-                      Não possui uma conta ainda?{' '}
-                    </Text>
-                    <TouchableOpacity onPress={() => router.push('/register')}>
-                      <Text className="text-sm font-medium text-indigo-600">Cadastre-se</Text>
-                    </TouchableOpacity>
+                    
+                    <View className="flex-row justify-center flex-wrap mt-4">
+                      <Text className="text-sm text-gray-600">
+                        Não possui uma conta ainda?{' '}
+                      </Text>
+                      <TouchableOpacity 
+                        onPress={() => router.push('/register')}
+                        disabled={isLoading}
+                      >
+                        <Text className="text-sm font-medium text-indigo-600">Cadastre-se</Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
                 </View>
-              </View>
-            </SafeAreaView>
-          </ScrollView>
-        </TouchableWithoutFeedback>
-      </KeyboardAvoidingView>
-    </LinearGradient>
-  </View>
+              </SafeAreaView>
+            </ScrollView>
+          </TouchableWithoutFeedback>
+        </KeyboardAvoidingView>
+      </LinearGradient>
+
+      {/* Modal 2FA */}
+      <TwoFactorModal 
+        isVisible={requiresTwoFactor}
+        onClose={handleClose2FAModal}
+      />
+    </View>
   );
 }
