@@ -13,13 +13,14 @@ import {
   Dimensions,
 } from 'react-native';
 
-// Tipos
-type SearchField = 'operacao' | 'container';
+// Tipos baseados nos campos reais da API
+type SearchField = 'id' | 'containerId';
 
 interface FilterOption {
   id: number;
   name: string;
   field: SearchField;
+  description: string;
 }
 
 interface FilterButtonProps {
@@ -35,10 +36,22 @@ const FilterButton: React.FC<FilterButtonProps> = ({
   const screenHeight = Dimensions.get('window').height;
   const modalPosition = useRef(new Animated.Value(screenHeight)).current;
   const backdropOpacity = useRef(new Animated.Value(0)).current;
-  const modalOpacity = useRef(new Animated.Value(0)).current; // Nova animação de opacidade
+  const modalOpacity = useRef(new Animated.Value(0)).current;
+  
+  // Opções de filtro baseadas nos campos da API
   const filterOptions: FilterOption[] = [
-    { id: 1, name: 'Pesquisar por operação', field: 'operacao' },
-    { id: 2, name: 'Pesquisar por container', field: 'container' },
+    { 
+      id: 1, 
+      name: 'ID da Operação', 
+      field: 'id',
+      description: 'Buscar por número da operação (ex: 123 ou OP-123)'
+    },
+    { 
+      id: 2, 
+      name: 'Container ID', 
+      field: 'containerId',
+      description: 'Buscar por identificação do container'
+    },
   ];
 
   useEffect(() => {
@@ -49,7 +62,7 @@ const FilterButton: React.FC<FilterButtonProps> = ({
 
   const showModal = () => {
     modalPosition.setValue(screenHeight);
-    modalOpacity.setValue(0); // Começa invisível
+    modalOpacity.setValue(0);
     backdropOpacity.setValue(0);
 
     Animated.parallel([
@@ -60,7 +73,7 @@ const FilterButton: React.FC<FilterButtonProps> = ({
         easing: Easing.out(Easing.cubic),
       }),
       Animated.timing(modalOpacity, {
-        toValue: 1, // Torna visível
+        toValue: 1,
         duration: 350,
         useNativeDriver: true,
         easing: Easing.out(Easing.cubic),
@@ -83,7 +96,7 @@ const FilterButton: React.FC<FilterButtonProps> = ({
         easing: Easing.in(Easing.cubic),
       }),
       Animated.timing(modalOpacity, {
-        toValue: 0, // Torna invisível
+        toValue: 0,
         duration: 250,
         useNativeDriver: true,
         easing: Easing.in(Easing.cubic),
@@ -137,13 +150,19 @@ const FilterButton: React.FC<FilterButtonProps> = ({
     })
   ).current;
 
+  // Função para obter o nome do filtro atual
+  const getCurrentFilterName = (): string => {
+    const currentOption = filterOptions.find(option => option.field === currentFilterField);
+    return currentOption?.name || 'Filtro';
+  };
+
   return (
     <View style={styles.container}>
       <TouchableOpacity
         onPress={() => setModalVisible(true)}
         style={styles.filterButton}
         activeOpacity={0.8}
-        accessibilityLabel="Open filter options"
+        accessibilityLabel={`Filtro atual: ${getCurrentFilterName()}`}
       >
         <Image
           source={require('./icons/filtro.png')}
@@ -151,6 +170,12 @@ const FilterButton: React.FC<FilterButtonProps> = ({
           resizeMode="contain"
           accessibilityIgnoresInvertColors
         />
+        {/* Indicador do filtro ativo */}
+        <View style={styles.activeIndicator}>
+          <Text style={styles.activeIndicatorText}>
+            {currentFilterField === 'id' ? 'ID' : 'Container'}
+          </Text>
+        </View>
       </TouchableOpacity>
 
       <Modal
@@ -171,29 +196,59 @@ const FilterButton: React.FC<FilterButtonProps> = ({
           </Animated.View>
 
           <Animated.View
-            style={[styles.modalContent, { transform: [{ translateY: modalPosition }], opacity: modalOpacity }]} // Adiciona opacidade
+            style={[
+              styles.modalContent, 
+              { 
+                transform: [{ translateY: modalPosition }], 
+                opacity: modalOpacity 
+              }
+            ]}
             {...panResponder.panHandlers}
           >
             <View style={styles.handleBar} />
             <Text style={styles.modalTitle}>Opções de Filtro</Text>
+            <Text style={styles.modalSubtitle}>
+              Escolha o campo para realizar a busca
+            </Text>
+            
             {filterOptions.map((option) => (
               <TouchableOpacity
                 key={option.id}
                 onPress={() => selectAndApplyFilter(option.field)}
-                style={[styles.optionButton, currentFilterField === option.field && styles.selectedOptionButton]}
-                accessibilityLabel={`Filter by ${option.name}`}
+                style={[
+                  styles.optionButton, 
+                  currentFilterField === option.field && styles.selectedOptionButton
+                ]}
+                accessibilityLabel={`Filtrar por ${option.name}`}
                 accessibilityRole="button"
               >
-                <Text style={[styles.optionText, currentFilterField === option.field && styles.selectedOptionText]}>
-                  {option.name}
-                </Text>
+                <View style={styles.optionContent}>
+                  <Text style={[
+                    styles.optionText, 
+                    currentFilterField === option.field && styles.selectedOptionText
+                  ]}>
+                    {option.name}
+                  </Text>
+                  <Text style={[
+                    styles.optionDescription,
+                    currentFilterField === option.field && styles.selectedOptionDescription
+                  ]}>
+                    {option.description}
+                  </Text>
+                </View>
+                {currentFilterField === option.field && (
+                  <View style={styles.checkmark}>
+                    <Text style={styles.checkmarkText}>✓</Text>
+                  </View>
+                )}
               </TouchableOpacity>
             ))}
+            
             <View style={styles.modalActions}>
               <Pressable
                 onPress={() => hideModal()}
                 style={styles.cancelButton}
-                accessibilityLabel="Cancel filter selection"
+                accessibilityLabel="Cancelar seleção de filtro"
                 accessibilityRole="button"
               >
                 <Text style={styles.cancelButtonText}>Cancelar</Text>
@@ -205,7 +260,8 @@ const FilterButton: React.FC<FilterButtonProps> = ({
     </View>
   );
 };
-// Estilos
+
+// Estilos atualizados
 const styles = StyleSheet.create({
   container: {
     alignItems: 'center',
@@ -215,13 +271,30 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#818cf8',
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 8,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
   },
   filterIcon: {
     width: 20,
     height: 28,
+    marginRight: 6,
+  },
+  activeIndicator: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  activeIndicatorText: {
+    color: 'white',
+    fontSize: 10,
+    fontWeight: '500',
   },
   modalContainer: {
     flex: 1,
@@ -239,8 +312,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    borderBottomRightRadius: 20,
-    borderBottomLeftRadius: 20,
     padding: 24,
     paddingTop: 16,
     elevation: 10,
@@ -248,6 +319,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: -2 },
     shadowOpacity: 0.2,
     shadowRadius: 5,
+    maxHeight: '80%',
   },
   handleBar: {
     width: 40,
@@ -258,41 +330,84 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   modalTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: 'bold',
-    marginBottom: 16,
+    marginBottom: 8,
+    color: '#1f2937',
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    color: '#6b7280',
+    marginBottom: 20,
   },
   optionButton: {
-    padding: 12,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderRadius: 8,
-    borderColor: '#d1d5db',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 2,
+    borderRadius: 12,
+    borderColor: '#e5e7eb',
+    backgroundColor: '#f9fafb',
   },
   selectedOptionButton: {
     backgroundColor: '#eff6ff',
-    borderColor: '#60a5fa',
+    borderColor: '#3b82f6',
+  },
+  optionContent: {
+    flex: 1,
   },
   optionText: {
+    fontSize: 16,
+    fontWeight: '600',
     color: '#374151',
+    marginBottom: 4,
   },
   selectedOptionText: {
+    color: '#3b82f6',
+  },
+  optionDescription: {
+    fontSize: 13,
+    color: '#6b7280',
+    lineHeight: 18,
+  },
+  selectedOptionDescription: {
     color: '#60a5fa',
+  },
+  checkmark: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#3b82f6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkmarkText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: 'bold',
   },
   modalActions: {
     flexDirection: 'row',
     justifyContent: 'center',
-    marginTop: 16,
+    marginTop: 20,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#e5e7eb',
   },
   cancelButton: {
-    backgroundColor: '#e5e7eb',
-    paddingHorizontal: 24,
+    backgroundColor: '#f3f4f6',
+    paddingHorizontal: 32,
     paddingVertical: 12,
     borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
   },
   cancelButtonText: {
     color: '#374151',
-    fontWeight: '500',
+    fontWeight: '600',
+    fontSize: 14,
   },
 });
 

@@ -1,14 +1,14 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, SafeAreaView, Animated, TextInput, FlatList, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, SafeAreaView, Animated, TextInput, FlatList, StyleSheet, ActivityIndicator, Alert, RefreshControl } from 'react-native';
 import { Svg, Path } from 'react-native-svg';
 import { cssInterop } from 'nativewind';
 import sombra from "../images/style";
-import users from "./results";
 import ListItem from "../components/operations";
 import FilterButton from '../components/filter';
 import Sidebar from '../components/sidebar';
 import { router } from 'expo-router';
 import ItemDetailModal from '../components/details';
+import { useAuth, useAuthenticatedFetch } from '../contexts/AuthContext';
 
 // Interop para permitir o uso de classes Tailwind em componentes React Native
 cssInterop(View, { className: 'style' });
@@ -18,52 +18,202 @@ cssInterop(ScrollView, { className: 'style' });
 cssInterop(SafeAreaView, { className: 'style' });
 cssInterop(Animated.View, { className: 'style' });
 
-// Define the type for search field
-type SearchField = 'operacao' | 'container';
+// Define the type for search field - baseado nos campos reais da API
+type SearchField = 'id' | 'containerId';
 
-// Define a type for your user items if not already defined elsewhere
-interface UserItem {
-  operacao: string;
-  container: string;
-  qtde_fotos: string;
-  // Add other properties from your users object as needed
+// Interface baseada na estrutura real da API
+interface OperationItem {
+  id: number;
+  containerId: string;
+  containerDescription: string;
+  containerImages: string[];
+  createdAt: string;
+  userId: number;
+  // Campos mapeados para compatibilidade com componentes existentes
+  operacao: string; // Será mapeado do id
+  container: string; // Será mapeado do containerId
+  qtde_fotos: string; // Será mapeado do containerImages.length
+  // Índice para compatibilidade com o componente ListItem
   [key: string]: any;
 }
 
+// Configuração da API
+const API_BASE_URL = 'http://containerview-prod.us-east-1.elasticbeanstalk.com';
+
 export default function Logs() {
-  const [searchField, setSearchField] = useState<SearchField>('operacao');
+  const [searchField, setSearchField] = useState<SearchField>('id');
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(false);
   const translateX = useRef(new Animated.Value(-256)).current;
   const overlayOpacity = useRef(new Animated.Value(0)).current;
   const sidebarWidth = 256;
   const [searchText, setSearchText] = useState<string>('');
-  const [list, setList] = useState<UserItem[]>(users);
+  const [operations, setOperations] = useState<OperationItem[]>([]);
+  const [filteredOperations, setFilteredOperations] = useState<OperationItem[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [refreshing, setRefreshing] = useState<boolean>(false);
   
   // Estados para o modal
   const [isModalVisible, setIsModalVisible] = useState<boolean>(false);
-  const [selectedItem, setSelectedItem] = useState<UserItem | null>(null);
+  const [selectedItem, setSelectedItem] = useState<OperationItem | null>(null);
   
+  // Hooks de autenticação
+  const { isAuthenticated, user, token } = useAuth();
+  const authenticatedFetch = useAuthenticatedFetch();
+
+  // Função para mapear dados do backend para o formato esperado pelos componentes
+  const mapOperationData = (backendOperation: any): OperationItem => {
+    return {
+      ...backendOperation,
+      // Campos mapeados para compatibilidade
+      operacao: `OP-${backendOperation.id}`, // Formato de ID da operação
+      container: backendOperation.containerId,
+      qtde_fotos: String(backendOperation.containerImages?.length || 0),
+    };
+  };
+
+  // Função para buscar operações do backend
+  const fetchOperations = async (showLoadingIndicator = true) => {
+    if (!isAuthenticated) {
+      console.log('❌ Usuário não autenticado - redirecionando para login');
+      router.replace('/');
+      return;
+    }
+
+    try {
+      if (showLoadingIndicator) {
+        setLoading(true);
+      }
+
+      console.log('🔄 Buscando operações do backend...');
+      console.log('👤 Usuário logado:', user?.cpf);
+      console.log('🔑 Token disponível:', token ? 'SIM' : 'NÃO');
+
+      const response = await authenticatedFetch(`${API_BASE_URL}/operations`);
+
+      console.log('📥 Resposta recebida:', {
+        status: response.status,
+        statusText: response.statusText,
+        ok: response.ok
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('✅ Operações recebidas:', {
+          count: data.length,
+          sample: data.length > 0 ? {
+            id: data[0].id,
+            containerId: data[0].containerId,
+            imageCount: data[0].containerImages?.length || 0
+          } : 'NENHUMA OPERAÇÃO'
+        });
+
+        // Mapeia os dados do backend para o formato esperado
+        const mappedOperations = data.map(mapOperationData);
+        setOperations(mappedOperations);
+        setFilteredOperations(mappedOperations);
+
+        console.log('🎯 Operações processadas e salvas no estado');
+      } else {
+        console.error('❌ Erro na resposta da API:', response.status);
+        
+        if (response.status === 401) {
+          Alert.alert(
+            'Sessão Expirada',
+            'Sua sessão expirou. Você será redirecionado para o login.',
+            [{ text: 'OK', onPress: () => router.replace('/') }]
+          );
+          return;
+        }
+
+        const errorMessage = getErrorMessage(response.status);
+        Alert.alert('Erro', `Não foi possível carregar as operações.\n\n${errorMessage}`);
+      }
+    } catch (error) {
+      console.error('❌ Erro ao buscar operações:', error);
+      
+      if (error instanceof Error && error.message === 'Sessão expirada') {
+        Alert.alert(
+          'Sessão Expirada',
+          'Sua sessão expirou. Você será redirecionado para o login.',
+          [{ text: 'OK', onPress: () => router.replace('/') }]
+        );
+      } else {
+        Alert.alert(
+          'Erro de Conexão',
+          'Não foi possível conectar ao servidor.\n\nVerifique sua conexão com a internet e tente novamente.',
+          [
+            { text: 'Tentar Novamente', onPress: () => fetchOperations() },
+            { text: 'Cancelar', style: 'cancel' }
+          ]
+        );
+      }
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  // Função para mapear códigos de erro HTTP
+  const getErrorMessage = (status: number): string => {
+    switch (status) {
+      case 400:
+        return 'Requisição inválida.';
+      case 401:
+        return 'Não autorizado. Faça login novamente.';
+      case 403:
+        return 'Você não tem permissão para ver as operações.';
+      case 404:
+        return 'Operações não encontradas.';
+      case 500:
+        return 'Erro interno do servidor.';
+      default:
+        return 'Erro desconhecido.';
+    }
+  };
+
+  // Efeito para buscar operações quando o componente for montado
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchOperations();
+    }
+  }, [isAuthenticated]);
+
   // Efeito para filtrar lista baseado no texto de busca
   useEffect(() => {
     if (searchText === '') {
-      setList(users);
+      setFilteredOperations(operations);
     } else {
-      const filteredList = users.filter((item) => {
-        const fieldValue = item[searchField];
-        // Verificação adicional para garantir que o campo existe e é uma string
-        return fieldValue && 
-               typeof fieldValue === 'string' && 
-               fieldValue.toLowerCase().includes(searchText.toLowerCase());
+      const filtered = operations.filter((item) => {
+        let searchValue = '';
+        
+        if (searchField === 'id') {
+          // Busca pelo ID (tanto o número quanto o formato OP-XXX)
+          searchValue = item.id.toString();
+          const operationFormat = `OP-${item.id}`;
+          return searchValue.includes(searchText) || 
+                 operationFormat.toLowerCase().includes(searchText.toLowerCase());
+        } else if (searchField === 'containerId') {
+          searchValue = item.containerId || '';
+          return searchValue.toLowerCase().includes(searchText.toLowerCase());
+        }
+        
+        return false;
       });
-      setList(filteredList);
+      setFilteredOperations(filtered);
     }
-  }, [searchText, searchField]);
+  }, [searchText, searchField, operations]);
   
   // Inicialização do sidebar
   useEffect(() => {
     translateX.setValue(-sidebarWidth);
     overlayOpacity.setValue(0);
   }, []);
+
+  // Função para refresh manual
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchOperations(false);
+  };
   
   /* sidebar effect */
   const toggleSidebar = () => {
@@ -90,16 +240,30 @@ export default function Logs() {
   };
   
   // Função para abrir o modal com os detalhes do item
-  const handleItemPress = (item: UserItem) => {
-    setSelectedItem(item);
-    setIsModalVisible(true);
+  const handleItemPress = (data: { [key: string]: any; operacao: string; container: string; qtde_fotos: string; }) => {
+    // Encontra o item completo baseado no ID
+    const fullItem = operations.find(op => op.operacao === data.operacao);
+    if (fullItem) {
+      setSelectedItem(fullItem);
+      setIsModalVisible(true);
+    }
   };
   
   // Função para fechar o modal
   const handleCloseModal = () => {
     setIsModalVisible(false);
-    setSelectedItem(null); // Limpa o item selecionado
+    setSelectedItem(null);
   };
+
+  // Se não autenticado, mostra loading
+  if (!isAuthenticated) {
+    return (
+      <SafeAreaView className="flex-1 bg-gray-50 items-center justify-center">
+        <ActivityIndicator size="large" color="#4F46E5" />
+        <Text className="text-gray-600 mt-4">Verificando autenticação...</Text>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView className="flex-1 bg-white">
@@ -114,6 +278,16 @@ export default function Logs() {
               <Path d="M2 4.75A.75.75 0 012.75 4h14.5a.75.75 0 010 1.5H2.75A.75.75 0 012 4.75zm0 10.5a.75.75 0 01.75-.75h7.5a.75.75 0 010 1.5h-7.5a.75.75 0 01-.75-.75zM2 10a.75.75 0 01.75-.75h14.5a.75.75 0 010 1.5H2.75A.75.75 0 012 10z" />
             </Svg>
           </TouchableOpacity>
+
+          {/* Indicador do usuário e contador de operações */}
+          <View className="absolute right-4 top-12 items-end">
+            <Text className="text-white text-sm font-medium">
+              {user?.cpf}
+            </Text>
+            <Text className="text-white/80 text-xs">
+              {operations.length} operação{operations.length !== 1 ? 'ões' : ''}
+            </Text>
+          </View>
         </View>
 
         {/* Sidebar Component */}
@@ -129,7 +303,7 @@ export default function Logs() {
         {/* Search Bar */}
         <View className='ml-2 mt-6 bg-white w-full flex-row items-center'>
           <TextInput
-            placeholder={`Pesquise por ${searchField === 'operacao' ? 'operação' : 'container'}`}
+            placeholder={`Pesquise por ${searchField === 'id' ? 'ID da operação' : 'container'}`}
             placeholderTextColor="#888"
             value={searchText}
             onChangeText={setSearchText}
@@ -141,6 +315,7 @@ export default function Logs() {
               shadowRadius: 2,
               elevation: 2,
             }}
+            editable={!loading}
           />
           <View className="mr-4">
             <FilterButton
@@ -152,25 +327,61 @@ export default function Logs() {
 
         {/* Lista */}
         <View className='bg-white w-full flex-1 items-center mt-4'>
-          <FlatList
-            data={list}
-            renderItem={({ item }) => (
-              <ListItem 
-                data={item} 
-                onPress={handleItemPress}
-              />
-            )}
-            keyExtractor={(item, index) => `${item.operacao}-${index}`}
-            className="flex-1 w-full"
-            contentContainerStyle={{ paddingBottom: 100 }} // Espaço para o botão flutuante
-            showsVerticalScrollIndicator={false}
-            ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
-            ListEmptyComponent={() => (
-              <View className="items-center justify-center p-8">
-                <Text className="text-gray-500 text-base">Nenhum resultado encontrado</Text>
-              </View>
-            )}
-          />
+          {loading ? (
+            <View className="flex-1 items-center justify-center">
+              <ActivityIndicator size="large" color="#4F46E5" />
+              <Text className="text-gray-600 mt-4">Carregando operações...</Text>
+            </View>
+          ) : (
+            <FlatList
+              data={filteredOperations}
+              renderItem={({ item }) => (
+                <ListItem 
+                  data={{
+                    operacao: item.operacao,
+                    container: item.container,
+                    qtde_fotos: item.qtde_fotos,
+                    // Campos adicionais que o ListItem pode precisar
+                    id: item.id,
+                    containerId: item.containerId,
+                    containerDescription: item.containerDescription,
+                    containerImages: item.containerImages,
+                    createdAt: item.createdAt,
+                    userId: item.userId,
+                  }}
+                  onPress={handleItemPress}
+                />
+              )}
+              keyExtractor={(item, index) => `${item.id}-${index}`}
+              className="flex-1 w-full"
+              contentContainerStyle={{ paddingBottom: 100 }}
+              showsVerticalScrollIndicator={false}
+              ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
+              ListEmptyComponent={() => (
+                <View className="items-center justify-center p-8">
+                  <Text className="text-gray-500 text-base text-center">
+                    {searchText 
+                      ? 'Nenhum resultado encontrado para sua busca' 
+                      : 'Nenhuma operação encontrada'
+                    }
+                  </Text>
+                  {!searchText && (
+                    <Text className="text-gray-400 text-sm text-center mt-2">
+                      Toque no botão + para criar sua primeira operação
+                    </Text>
+                  )}
+                </View>
+              )}
+              refreshControl={
+                <RefreshControl
+                  refreshing={refreshing}
+                  onRefresh={onRefresh}
+                  colors={['#4F46E5']}
+                  tintColor="#4F46E5"
+                />
+              }
+            />
+          )}
         </View>
         
         {/* Modal de Detalhes */}
@@ -183,7 +394,11 @@ export default function Logs() {
         )}
         
         {/* Botão Flutuante */}
-        <TouchableOpacity style={styles.floatingButton} onPress={handleForm}>
+        <TouchableOpacity 
+          style={[styles.floatingButton, loading && styles.floatingButtonDisabled]} 
+          onPress={handleForm}
+          disabled={loading}
+        >
           <Text style={styles.floatingButtonText}>+</Text>
         </TouchableOpacity>
       </View>
@@ -208,6 +423,10 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 4,
     zIndex: 1000,
+  },
+  floatingButtonDisabled: {
+    backgroundColor: '#9CA3AF',
+    elevation: 4,
   },
   floatingButtonText: {
     color: 'white',

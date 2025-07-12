@@ -232,12 +232,10 @@ export default function LoginScreen() {
             <ScrollView className="flex-1">
               <SafeAreaView className="flex-1 items-center justify-center px-5 py-10">
                 <Image
-                  source={require('./images/coruja.png')}
-                  className="w-24 h-24 mb-1 mt-20"
+                  source={require('./components/icons/NOCT.png')}
+                  className="w-72 h-72 mt-10"
                   resizeMode="contain"
-                />
-                <Text className="text-2xl font-bold text-black mb-8">NOCT</Text>
-                
+                />                
                 <View className="w-full max-w-md bg-white rounded-lg shadow-lg px-6 py-6 mt-6">
                   <Text className="text-xl font-bold text-gray-800 mb-5">
                     Entre na sua conta

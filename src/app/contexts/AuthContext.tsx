@@ -307,27 +307,52 @@ export const useAuthenticatedFetch = () => {
   const { token, logout } = useAuth();
 
   const authenticatedFetch = async (url: string, options: RequestInit = {}) => {
+    console.log('🔍 useAuthenticatedFetch - Iniciando requisição');
+    console.log('🔗 URL:', url);
+    console.log('🔑 Token disponível:', token ? `${token.substring(0, 30)}...` : 'NENHUM TOKEN');
+    
     if (!token) {
+      console.error('❌ Token não disponível para requisição autenticada');
       throw new Error('Token não disponível');
     }
 
-    const headers = {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`, // Usa token definitivo
+    // Cria headers dinamicamente baseado no tipo de body
+    const headers: Record<string, string> = {
+      'Authorization': `Bearer ${token}`,
+    };
+
+    // Se não é FormData, adiciona Content-Type application/json
+    if (!(options.body instanceof FormData)) {
+      headers['Content-Type'] = 'application/json';
+    }
+
+    // Merge com headers customizados (se houver)
+    const finalHeaders = {
+      ...headers,
       ...options.headers,
     };
 
+    console.log('📤 Headers da requisição:', {
+      ...finalHeaders,
+      'Authorization': `Bearer ${token.substring(0, 30)}...` // Log parcial do token
+    });
+
     const response = await fetch(url, {
       ...options,
-      headers,
+      headers: finalHeaders,
+    });
+
+    console.log('📥 Resposta da requisição autenticada:', {
+      status: response.status,
+      statusText: response.statusText,
+      ok: response.ok
     });
 
     // Se token expirou, faz logout automático
     if (response.status === 401) {
-      console.log('🔒 Token expirado, fazendo logout automático');
+      console.log('🔒 Token expirado (401), fazendo logout automático');
       await logout();
-      throw new Error('Sessão expirada'
-      );
+      throw new Error('Sessão expirada');
     }
 
     return response;

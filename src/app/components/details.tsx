@@ -11,13 +11,14 @@ cssInterop(ScrollView, { className: 'style' });
 cssInterop(Modal, { className: 'style' });
 cssInterop(Image, { className: 'style' });
 
-// Tipos e interfaces
+// Interface baseada nos campos reais da API
 interface OperationItem {
-  operacao: string;
-  container: string;
-  qtde_fotos: string;
-  images?: string[]; // Array opcional de URLs das imagens
-  [key: string]: any;
+  id: number;
+  containerId: string;
+  containerDescription: string;
+  containerImages: string[];
+  createdAt: string;
+  userId: number;
 }
 
 interface ItemDetailModalProps {
@@ -42,13 +43,32 @@ const ImageIcon = () => (
   </Svg>
 );
 
+// Componente para ícone de descrição
+const DescriptionIcon = () => (
+  <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="#6366F1" strokeWidth={1.5}>
+    <Path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+  </Svg>
+);
+
+// Componente para ícone de calendário
+const CalendarIcon = () => (
+  <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="#6366F1" strokeWidth={1.5}>
+    <Path d="M8 2v4m8-4v4M3 10h18M5 4h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V6a2 2 0 012-2z" />
+  </Svg>
+);
+
+// Componente para ícone de usuário
+const UserIcon = () => (
+  <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="#6366F1" strokeWidth={1.5}>
+    <Path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2M12 7a4 4 0 100-8 4 4 0 000 8z" />
+  </Svg>
+);
+
 // Componente para badge de disponibilidade de fotos
-const PhotosBadge: React.FC<{ count: string }> = ({ count }) => {
-  const photoCount = parseInt(count || '0');
-  
+const PhotosBadge: React.FC<{ count: number }> = ({ count }) => {
   return (
     <View className="flex-row items-center mt-1">
-      <Text className="text-lg font-semibold text-gray-800">{count || '0'}</Text>
+      <Text className="text-lg font-semibold text-gray-800">{count}</Text>
     </View>
   );
 };
@@ -65,6 +85,63 @@ const InfoCard: React.FC<{
     {children || <Text className="text-lg font-semibold text-gray-800 mt-1">{value}</Text>}
   </View>
 );
+
+// Componente para descrição expandida
+const DescriptionCard: React.FC<{ description: string }> = ({ description }) => (
+  <View className="p-4 rounded-lg border bg-amber-50 border-amber-200 mb-4">
+    <View className="flex-row items-center mb-2">
+      <DescriptionIcon />
+      <Text className="text-sm text-amber-700 font-medium ml-2">Descrição da Operação</Text>
+    </View>
+    <Text className="text-gray-800 leading-5 text-base">
+      {description}
+    </Text>
+  </View>
+);
+
+// Componente para informações do sistema
+const SystemInfoCard: React.FC<{ 
+  createdAt: string; 
+  userId: number;
+}> = ({ createdAt, userId }) => {
+  // Formatar data
+  const formatDate = (dateString: string) => {
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleString('pt-BR', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch {
+      return 'Data inválida';
+    }
+  };
+
+  return (
+    <View className="p-4 rounded-lg border bg-blue-50 border-blue-200 mb-4">
+      <Text className="text-sm text-blue-700 font-medium mb-3">Informações do Sistema</Text>
+      
+      <View className="space-y-3">
+        {/* Data de Criação */}
+        <View className="flex-row items-center">
+          <CalendarIcon />
+          <Text className="text-blue-600 font-medium ml-2 mr-2">Criado em:</Text>
+          <Text className="text-gray-800">{formatDate(createdAt)}</Text>
+        </View>
+        
+        {/* ID do Usuário */}
+        <View className="flex-row items-center">
+          <UserIcon />
+          <Text className="text-blue-600 font-medium ml-2 mr-2">Usuário ID:</Text>
+          <Text className="text-gray-800">{userId}</Text>
+        </View>
+      </View>
+    </View>
+  );
+};
 
 // Componente para slot de imagem
 const ImageSlot: React.FC<{ 
@@ -104,29 +181,14 @@ const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ isVisible, onClose, i
            value === 'undefined' || String(value).trim() === '';
   };
 
-  const formatFieldTitle = (key: string): string => {
-    const fieldTitles: Record<string, string> = {
-      operacao: 'Operação',
-      qtde_fotos: 'Quantidade de Fotos',
-    };
-    
-    return fieldTitles[key] || key
-      .split('_')
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(' ');
-  };
-
-  // Campos prioritários e adicionais
-  const priorityFields = ['operacao', 'container', 'qtde_fotos', 'images'];
-  const additionalFields = Object.entries(item)
-    .filter(([key, value]) => !priorityFields.includes(key) && !isEmpty(value))
-    .sort(([a], [b]) => a.localeCompare(b));
-
   // Handler para pressionar imagem
   const handleImagePress = (index: number) => {
+    console.log(`Imagem ${index + 1} pressionada - Operação ID: ${item.id}`);
     // Aqui você pode implementar a lógica para abrir a imagem em tela cheia
-    console.log(`Imagem ${index + 1} pressionada`);
   };
+
+  // Verificar se tem descrição válida
+  const hasDescription = !isEmpty(item.containerDescription);
 
   return (
     <Modal
@@ -149,67 +211,95 @@ const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ isVisible, onClose, i
           {/* Content */}
           <ScrollView className="flex-1 px-5 pt-4 pb-2" showsVerticalScrollIndicator={false}>
             
-            {/* Operação em destaque */}
+            {/* ID da Operação em destaque */}
             <InfoCard 
-              title="Operação" 
-              value={isEmpty(item.operacao) ? 'Não informado' : item.operacao}
+              title="ID da Operação" 
+              value={`OP-${item.id}`}
               className="mb-4 bg-indigo-50 border-indigo-100"
             >
               <Text className="text-xl font-bold text-indigo-900 mt-1">
-                {isEmpty(item.operacao) ? 'Não informado' : item.operacao}
+                OP-{item.id}
               </Text>
             </InfoCard>
+
+            {/* Descrição da operação (se existir) */}
+            {hasDescription && (
+              <DescriptionCard description={item.containerDescription} />
+            )}
             
             {/* Container e Fotos lado a lado */}
             <View className="flex-row mb-4 space-x-2">
               <View className="flex-1">
                 <InfoCard 
-                  title="Container" 
-                  value={isEmpty(item.container) ? 'Não informado' : item.container} 
+                  title="Container ID" 
+                  value={isEmpty(item.containerId) ? 'Não informado' : item.containerId} 
                 />
               </View>
               
               <View className="flex-1">
                 <InfoCard title="Fotos" value="">
-                  <PhotosBadge count={item.qtde_fotos} />
+                  <PhotosBadge count={item.containerImages?.length || 0} />
                 </InfoCard>
               </View>
             </View>
 
+            {/* Informações do Sistema */}
+            <SystemInfoCard 
+              createdAt={item.createdAt}
+              userId={item.userId}
+            />
+
             {/* Seção de Imagens */}
-            <View className="mt-6 mb-4">
+            <View className="mt-2 mb-4">
               <Text className="mb-4 text-base font-medium text-gray-700">
-                Fotos da Operação
+                Fotos da Operação ({item.containerImages?.length || 0})
               </Text>
               
-              {/* Grid de imagens - 3 em cima, 2 embaixo */}
-              <View className="space-y-3">
-                {/* Primeira linha - 3 imagens */}
-                <View className="flex-row space-x-3">
-                  {[0, 1, 2].map((index) => (
-                    <View key={index} className="flex-1">
-                      <ImageSlot 
-                        imageUrl={item.images?.[index]}
-                        index={index}
-                        onPress={() => handleImagePress(index)}
-                      />
+              {item.containerImages && item.containerImages.length > 0 ? (
+                <View className="space-y-3">
+                  {/* Primeira linha - 3 imagens */}
+                  <View className="flex-row space-x-3">
+                    {[0, 1, 2].map((index) => (
+                      <View key={index} className="flex-1">
+                        <ImageSlot 
+                          imageUrl={item.containerImages[index]}
+                          index={index}
+                          onPress={() => handleImagePress(index)}
+                        />
+                      </View>
+                    ))}
+                  </View>
+                  
+                  {/* Segunda linha - 2 imagens centralizadas */}
+                  <View className="flex-row space-x-3 justify-center">
+                    {[3, 4].map((index) => (
+                      <View key={index} style={styles.bottomImageContainer}>
+                        <ImageSlot 
+                          imageUrl={item.containerImages[index]}
+                          index={index}
+                          onPress={() => handleImagePress(index)}
+                        />
+                      </View>
+                    ))}
+                  </View>
+                  
+                  {/* Indicador para mais imagens */}
+                  {item.containerImages.length > 5 && (
+                    <View className="mt-3">
+                      <Text className="text-gray-500 text-center text-sm">
+                        +{item.containerImages.length - 5} imagem{item.containerImages.length - 5 > 1 ? 's' : ''} adicional{item.containerImages.length - 5 > 1 ? 'is' : ''}
+                      </Text>
                     </View>
-                  ))}
+                  )}
                 </View>
-                
-                {/* Segunda linha - 2 imagens centralizadas */}
-                <View className="flex-row space-x-3 justify-center">
-                  {[3, 4].map((index) => (
-                    <View key={index} style={styles.bottomImageContainer}>
-                      <ImageSlot 
-                        imageUrl={item.images?.[index]}
-                        index={index}
-                        onPress={() => handleImagePress(index)}
-                      />
-                    </View>
-                  ))}
+              ) : (
+                <View className="bg-gray-50 p-8 rounded-lg items-center">
+                  <ImageIcon />
+                  <Text className="text-gray-500 text-center mt-2">
+                    Nenhuma imagem anexada
+                  </Text>
                 </View>
-              </View>
+              )}
             </View>
           </ScrollView>
           
