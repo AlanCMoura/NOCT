@@ -180,7 +180,7 @@ const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ isVisible, onClose, i
 
             {/* Informações do Usuário */}
             <View className="p-4 rounded-lg border bg-blue-50 border-blue-200 mb-4">
-              <Text className="text-sm text-blue-700 font-medium mb-2">Informações do Sistema</Text>
+              <Text className="text-sm text-blue-700 font-medium mb-2">Preenchido por:</Text>
               <Text className="text-blue-600 text-sm">
                 Criado por: {item.user?.firstName || 'N/A'} {item.user?.lastName || ''}
               </Text>

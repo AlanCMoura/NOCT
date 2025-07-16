@@ -467,7 +467,7 @@ export default function RegisterScreen() {
                         >
                           <Picker.Item label="Inspetor" value="INSPETOR" />
                           <Picker.Item label="Administrador" value="ADMIN" />
-                          <Picker.Item label="Gerente" value="MANAGER" />
+                          <Picker.Item label="Gerente" value="GERENTE" />
                         </Picker>
                       </View>
                     </View>
