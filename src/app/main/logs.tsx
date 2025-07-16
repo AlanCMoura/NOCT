@@ -18,21 +18,38 @@ cssInterop(ScrollView, { className: 'style' });
 cssInterop(SafeAreaView, { className: 'style' });
 cssInterop(Animated.View, { className: 'style' });
 
-// Define the type for search field - baseado nos campos reais da API
+// Define o tipo para search field
 type SearchField = 'id' | 'containerId';
 
-// Interface baseada na estrutura real da API
+// Interface para User baseada na resposta real da API
+interface User {
+  id: number;
+  firstName: string;
+  lastName: string;
+  cpf: string;
+  email: string;
+  password: string;
+  role: string;
+  twoFactorEnabled: boolean;
+}
+
+// Interface para Container baseada na resposta real da API
+interface Container {
+  id: string;
+  description: string;
+  images: string[];
+}
+
+// Interface para OperationItem baseada na resposta REAL da API
 interface OperationItem {
   id: number;
-  containerId: string;
-  containerDescription: string;
-  containerImages: string[];
+  container: Container; // ← Objeto container completo
+  user: User; // ← Objeto user completo (já vem na resposta)
   createdAt: string;
-  userId: number;
-  // Campos mapeados para compatibilidade com componentes existentes
-  operacao: string; // Será mapeado do id
-  container: string; // Será mapeado do containerId
-  qtde_fotos: string; // Será mapeado do containerImages.length
+  
+  // Campo calculado para compatibilidade
+  qtde_fotos: number;
+  
   // Índice para compatibilidade com o componente ListItem
   [key: string]: any;
 }
@@ -60,14 +77,42 @@ export default function Logs() {
   const { isAuthenticated, user, token } = useAuth();
   const authenticatedFetch = useAuthenticatedFetch();
 
-  // Função para mapear dados do backend para o formato esperado pelos componentes
-  const mapOperationData = (backendOperation: any): OperationItem => {
+  // Função para mapear dados da API real para o formato esperado pelos componentes
+  const mapOperationData = (apiResponse: any): OperationItem => {
+    const mappedData: OperationItem = {
+      id: apiResponse.id,
+      container: apiResponse.container,
+      user: apiResponse.user,
+      createdAt: apiResponse.createdAt,
+      
+      // Campo calculado
+      qtde_fotos: apiResponse.container?.images?.length || 0,
+    };
+
+    console.log('🔄 Mapeando operação:', {
+      id: mappedData.id,
+      containerId: mappedData.container?.id || 'N/A',
+      imageCount: mappedData.qtde_fotos,
+      hasUser: !!mappedData.user,
+      userName: mappedData.user ? `${mappedData.user.firstName} ${mappedData.user.lastName}` : 'N/A'
+    });
+
+    return mappedData;
+  };
+
+  // Função para mapear dados para o componente ListItem
+  const mapDataForListItem = (item: OperationItem) => {
     return {
-      ...backendOperation,
-      // Campos mapeados para compatibilidade
-      operacao: `OP-${backendOperation.id}`, // Formato de ID da operação
-      container: backendOperation.containerId,
-      qtde_fotos: String(backendOperation.containerImages?.length || 0),
+      operacao: `OP-${item.id}`, // Gera na hora da exibição
+      container: item.container?.id || '', // Usa o ID real do container
+      qtde_fotos: String(item.qtde_fotos),
+      // Campos adicionais que o ListItem pode precisar
+      id: item.id,
+      containerId: item.container?.id || '',
+      containerDescription: item.container?.description || '',
+      containerImages: item.container?.images || [],
+      createdAt: item.createdAt,
+      userId: item.user?.id || 0,
     };
   };
 
@@ -102,12 +147,13 @@ export default function Logs() {
           count: data.length,
           sample: data.length > 0 ? {
             id: data[0].id,
-            containerId: data[0].containerId,
-            imageCount: data[0].containerImages?.length || 0
+            hasContainer: !!data[0].container,
+            hasUser: !!data[0].user,
+            containerImagesCount: data[0].container?.images?.length || 0
           } : 'NENHUMA OPERAÇÃO'
         });
 
-        // Mapeia os dados do backend para o formato esperado
+        // Mapeia os dados da API para o formato interno
         const mappedOperations = data.map(mapOperationData);
         setOperations(mappedOperations);
         setFilteredOperations(mappedOperations);
@@ -184,16 +230,14 @@ export default function Logs() {
       setFilteredOperations(operations);
     } else {
       const filtered = operations.filter((item) => {
-        let searchValue = '';
-        
         if (searchField === 'id') {
           // Busca pelo ID (tanto o número quanto o formato OP-XXX)
-          searchValue = item.id.toString();
+          const searchValue = item.id.toString();
           const operationFormat = `OP-${item.id}`;
           return searchValue.includes(searchText) || 
                  operationFormat.toLowerCase().includes(searchText.toLowerCase());
         } else if (searchField === 'containerId') {
-          searchValue = item.containerId || '';
+          const searchValue = item.container?.id || '';
           return searchValue.toLowerCase().includes(searchText.toLowerCase());
         }
         
@@ -239,13 +283,34 @@ export default function Logs() {
     router.push('/main/form');
   };
   
-  // Função para abrir o modal com os detalhes do item
+  // Função para abrir o modal (usando IDs reais, sem redundância)
   const handleItemPress = (data: { [key: string]: any; operacao: string; container: string; qtde_fotos: string; }) => {
-    // Encontra o item completo baseado no ID
-    const fullItem = operations.find(op => op.operacao === data.operacao);
-    if (fullItem) {
+    try {
+      // Extrair ID da operação do formato "OP-123"
+      const operationId = parseInt(data.operacao.replace('OP-', ''));
+      
+      // Encontra o item pelo ID real
+      const fullItem = operations.find(op => op.id === operationId);
+      if (!fullItem) {
+        Alert.alert('Erro', 'Operação não encontrada');
+        return;
+      }
+
+      console.log('📋 Abrindo modal (usando IDs reais):', {
+        operationId: fullItem.id,
+        containerId: fullItem.container?.id || 'N/A',
+        hasUser: !!fullItem.user,
+        hasContainer: !!fullItem.container,
+        imageCount: fullItem.qtde_fotos,
+        userName: fullItem.user ? `${fullItem.user.firstName} ${fullItem.user.lastName}` : 'N/A'
+      });
+
       setSelectedItem(fullItem);
       setIsModalVisible(true);
+
+    } catch (error) {
+      console.error('❌ Erro ao abrir modal:', error);
+      Alert.alert('Erro', 'Erro ao abrir detalhes da operação');
     }
   };
   
@@ -337,18 +402,7 @@ export default function Logs() {
               data={filteredOperations}
               renderItem={({ item }) => (
                 <ListItem 
-                  data={{
-                    operacao: item.operacao,
-                    container: item.container,
-                    qtde_fotos: item.qtde_fotos,
-                    // Campos adicionais que o ListItem pode precisar
-                    id: item.id,
-                    containerId: item.containerId,
-                    containerDescription: item.containerDescription,
-                    containerImages: item.containerImages,
-                    createdAt: item.createdAt,
-                    userId: item.userId,
-                  }}
+                  data={mapDataForListItem(item)}
                   onPress={handleItemPress}
                 />
               )}
@@ -385,13 +439,12 @@ export default function Logs() {
         </View>
         
         {/* Modal de Detalhes */}
-        {selectedItem && (
-          <ItemDetailModal
-            isVisible={isModalVisible}
-            onClose={handleCloseModal}
-            item={selectedItem}
-          />
-        )}
+        <ItemDetailModal
+          isVisible={isModalVisible}
+          onClose={handleCloseModal}
+          item={selectedItem}
+          imageFetch={authenticatedFetch}
+        />
         
         {/* Botão Flutuante */}
         <TouchableOpacity 
