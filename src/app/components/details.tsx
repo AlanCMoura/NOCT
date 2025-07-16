@@ -170,6 +170,14 @@ const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ isVisible, onClose, i
               </View>
             </View>
 
+            {/* DESCRIÇÃO DA OPERAÇÃO - ADICIONADA */}
+            <View className="p-4 rounded-lg border bg-green-50 border-green-100 mb-4">
+              <Text className="text-sm text-green-700 font-medium">Descrição da Operação</Text>
+              <Text className="text-base text-green-900 mt-2 leading-5">
+                {item.container?.description || 'Nenhuma descrição disponível'}
+              </Text>
+            </View>
+
             {/* Informações do Usuário */}
             <View className="p-4 rounded-lg border bg-blue-50 border-blue-200 mb-4">
               <Text className="text-sm text-blue-700 font-medium mb-2">Informações do Sistema</Text>
