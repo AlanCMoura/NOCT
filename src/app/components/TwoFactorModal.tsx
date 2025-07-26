@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import { cssInterop } from "nativewind";
 import { Svg, Path } from 'react-native-svg';
-import { useAuth } from '../contexts/AuthContext'; // Ajuste o caminho
+import { useAuth } from '../contexts/_AuthContext'; // Ajuste o caminho
 
 // Aplicando cssInterop para todos os componentes que vamos estilizar
 cssInterop(Text, {

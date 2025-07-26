@@ -102,3 +102,5 @@ export const useContainerImages = ({
     refetch: fetchImages
   };
 };
+
+export default function() { return null; }

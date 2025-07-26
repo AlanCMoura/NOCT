@@ -3,12 +3,13 @@ import { View, Text, TouchableOpacity, ScrollView, SafeAreaView, Animated, TextI
 import { Svg, Path } from 'react-native-svg';
 import { cssInterop } from 'nativewind';
 import sombra from "../images/style";
-import ListItem from "../components/operations";
-import FilterButton from '../components/filter';
-import Sidebar from '../components/sidebar';
+import ListItem from "../components/Operations";
+import FilterButton from '../components/Filter';
+import Sidebar from '../components/Sidebar';
 import { router } from 'expo-router';
-import ItemDetailModal from '../components/details';
-import { useAuth, useAuthenticatedFetch } from '../contexts/AuthContext';
+import ItemDetailModal from '../components/Details';
+import { useAuth, useAuthenticatedFetch } from '../contexts/_AuthContext';
+import CustomStatusBar from '../components/StatusBar'; // Importando o componente CustomStatusBar
 
 // Interop para permitir o uso de classes Tailwind em componentes React Native
 cssInterop(View, { className: 'style' });
@@ -280,7 +281,7 @@ export default function Logs() {
   };
 
   const handleForm = () => {
-    router.push('/main/form');
+    router.push('/main/Form');
   };
   
   // Função para abrir o modal (usando IDs reais, sem redundância)
@@ -323,36 +324,75 @@ export default function Logs() {
   // Se não autenticado, mostra loading
   if (!isAuthenticated) {
     return (
-      <SafeAreaView className="flex-1 bg-gray-50 items-center justify-center">
-        <ActivityIndicator size="large" color="#4F46E5" />
-        <Text className="text-gray-600 mt-4">Verificando autenticação...</Text>
+      <SafeAreaView className="flex-1 bg-white items-center justify-center">
+        <CustomStatusBar 
+          barStyle="light-content"
+          backgroundColor="#6D7380"
+          translucent={true}
+        />
+        <ActivityIndicator size="large" color="#49C5B6" />
+        <Text className="mt-4" style={{ color: '#2A2E40' }}>Verificando autenticação...</Text>
       </SafeAreaView>
     );
   }
 
   return (
     <SafeAreaView className="flex-1 bg-white">
+      {/* Usando o CustomStatusBar com configurações específicas */}
+      <CustomStatusBar 
+        barStyle="light-content"
+        backgroundColor="#6D7380"
+        translucent={true}
+      />
+      
       <View className="flex-1 flex-col">
+        
         {/* Header */}
-        <View className='w-full h-28 bg-indigo-400 shadow-lg' style={sombra.shadow}>
+        <View className='w-full h-28 shadow-lg' style={[{ backgroundColor: '#49C5B6' }, sombra.shadow]}>
           <TouchableOpacity
             className="absolute p-2 mt-12 ml-3 z-10"
             onPress={toggleSidebar}
+            activeOpacity={0.7}
+            style={{
+              borderRadius: 8,
+            }}
           >
-            <Svg width={30} height={30} viewBox="0 0 20 20" fill="#000000">
-              <Path d="M2 4.75A.75.75 0 012.75 4h14.5a.75.75 0 010 1.5H2.75A.75.75 0 012 4.75zm0 10.5a.75.75 0 01.75-.75h7.5a.75.75 0 010 1.5h-7.5a.75.75 0 01-.75-.75zM2 10a.75.75 0 01.75-.75h14.5a.75.75 0 010 1.5H2.75A.75.75 0 012 10z" />
+            <Svg width={30} height={30} viewBox="0 0 20 20" fill="none">
+              <Path 
+                d="M2 4.75A.75.75 0 012.75 4h14.5a.75.75 0 010 1.5H2.75A.75.75 0 012 4.75zm0 10.5a.75.75 0 01.75-.75h7.5a.75.75 0 010 1.5h-7.5a.75.75 0 01-.75-.75zM2 10a.75.75 0 01.75-.75h14.5a.75.75 0 010 1.5H2.75A.75.75 0 012 10z"
+                stroke="#000000"
+                strokeWidth="1.1"
+                strokeLinecap="round"
+              />
             </Svg>
           </TouchableOpacity>
 
-          {/* Indicador do usuário e contador de operações */}
-          <View className="absolute right-4 top-12 items-end">
-            <Text className="text-white text-sm font-medium">
-              {user?.cpf}
-            </Text>
-            <Text className="text-white/80 text-xs">
-              {operations.length} operação{operations.length !== 1 ? 'ões' : ''}
-            </Text>
-          </View>
+          {/* Ícone de perfil */}
+          <TouchableOpacity 
+            className="absolute right-4 top-12 p-2"
+            activeOpacity={0.7}
+            onPress={() => {
+              // Aqui você pode adicionar navegação para tela de perfil
+              console.log('Navegando para perfil...');
+            }}
+          >
+            <Svg width={30} height={30} viewBox="0 0 24 24" fill="none">
+              <Path
+                d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"
+                stroke="#2A2E40"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              <Path
+                d="M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z"
+                stroke="#2A2E40"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </Svg>
+          </TouchableOpacity>
         </View>
 
         {/* Sidebar Component */}
@@ -369,11 +409,14 @@ export default function Logs() {
         <View className='ml-2 mt-6 bg-white w-full flex-row items-center'>
           <TextInput
             placeholder={`Pesquise por ${searchField === 'id' ? 'ID da operação' : 'container'}`}
-            placeholderTextColor="#888"
+            placeholderTextColor="#6D7380"
             value={searchText}
             onChangeText={setSearchText}
-            className="bg-gray-50 border border-gray-300 text-gray-900 rounded-lg px-3 py-2.5 flex-1 mr-4 ml-7"
+            className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5 flex-1 mr-4 ml-7"
             style={{
+              borderColor: searchText ? '#49C5B6' : '#E5E7EB',
+              borderWidth: searchText ? 2 : 1,
+              color: '#2A2E40',
               shadowColor: "#000",
               shadowOffset: { width: 0, height: 1 },
               shadowOpacity: 0.1,
@@ -381,6 +424,7 @@ export default function Logs() {
               elevation: 2,
             }}
             editable={!loading}
+            selectionColor="#49C5B6"
           />
           <View className="mr-4">
             <FilterButton
@@ -394,8 +438,8 @@ export default function Logs() {
         <View className='bg-white w-full flex-1 items-center mt-4'>
           {loading ? (
             <View className="flex-1 items-center justify-center">
-              <ActivityIndicator size="large" color="#4F46E5" />
-              <Text className="text-gray-600 mt-4">Carregando operações...</Text>
+              <ActivityIndicator size="large" color="#49C5B6" />
+              <Text className="mt-4" style={{ color: '#2A2E40' }}>Carregando operações...</Text>
             </View>
           ) : (
             <FlatList
@@ -408,19 +452,19 @@ export default function Logs() {
               )}
               keyExtractor={(item, index) => `${item.id}-${index}`}
               className="flex-1 w-full"
-              contentContainerStyle={{ paddingBottom: 100 }}
+              contentContainerStyle={{ paddingBottom: 100, paddingHorizontal: 16 }}
               showsVerticalScrollIndicator={false}
               ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
               ListEmptyComponent={() => (
                 <View className="items-center justify-center p-8">
-                  <Text className="text-gray-500 text-base text-center">
+                  <Text className="text-base text-center" style={{ color: '#6D7380' }}>
                     {searchText 
                       ? 'Nenhum resultado encontrado para sua busca' 
                       : 'Nenhuma operação encontrada'
                     }
                   </Text>
                   {!searchText && (
-                    <Text className="text-gray-400 text-sm text-center mt-2">
+                    <Text className="text-sm text-center mt-2" style={{ color: '#6D7380', opacity: 0.7 }}>
                       Toque no botão + para criar sua primeira operação
                     </Text>
                   )}
@@ -430,8 +474,8 @@ export default function Logs() {
                 <RefreshControl
                   refreshing={refreshing}
                   onRefresh={onRefresh}
-                  colors={['#4F46E5']}
-                  tintColor="#4F46E5"
+                  colors={['#49C5B6']}
+                  tintColor="#49C5B6"
                 />
               }
             />
@@ -445,14 +489,19 @@ export default function Logs() {
           item={selectedItem}
           imageFetch={authenticatedFetch}
         />
-        
-        {/* Botão Flutuante */}
+      </View>
+      
+      {/* Botão Flutuante - Movido para fora da estrutura principal */}
+      <View style={styles.floatingButtonContainer}>
         <TouchableOpacity 
-          style={[styles.floatingButton, loading && styles.floatingButtonDisabled]} 
+          style={[
+            styles.floatingButton, 
+          ]} 
           onPress={handleForm}
           disabled={loading}
+          activeOpacity={0.8}
         >
-          <Text style={styles.floatingButtonText}>+</Text>
+            <Text style={styles.floatingButtonText}>+</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -460,30 +509,40 @@ export default function Logs() {
 }
 
 const styles = StyleSheet.create({
-  floatingButton: {
+  floatingButtonContainer: {
     position: 'absolute',
     bottom: 30,
     right: 20,
-    backgroundColor: '#4f46e5',
+    zIndex: 9999, // Z-index muito alto para garantir que fique por cima
+  },
+  floatingButton: {
+    backgroundColor: '#49C5B6', // Verde-água da paleta
     width: 60,
     height: 60,
     borderRadius: 30,
     justifyContent: 'center',
     alignItems: 'center',
-    elevation: 8,
+    elevation: 12, // Elevation maior no Android
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.3,
-    shadowRadius: 4,
-    zIndex: 1000,
+    shadowRadius: 8,
+    // Borda sutil para melhor definição
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+    // Efeito de pressão mais suave
+    transform: [{ scale: 1 }],
   },
   floatingButtonDisabled: {
-    backgroundColor: '#9CA3AF',
-    elevation: 4,
+    backgroundColor: '#6D7380', // Cinza quando desabilitado
+    elevation: 6,
+    shadowOpacity: 0.1,
   },
   floatingButtonText: {
     color: 'white',
-    fontSize: 24,
+    fontSize: 22, // Tamanho um pouco maior
     fontWeight: 'bold',
+    textAlign: 'center',
+    lineHeight: 28, // Para centralização perfeita
   },
 });

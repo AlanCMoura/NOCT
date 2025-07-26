@@ -7,7 +7,8 @@ import { router } from 'expo-router'
 import { cssInterop } from 'nativewind';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
-import { useAuth, useAuthenticatedFetch } from '../contexts/AuthContext'; // Ajuste o caminho
+import { useAuth, useAuthenticatedFetch } from '../contexts/_AuthContext';
+import CustomStatusBar from '../components/StatusBar'; // Importando o componente CustomStatusBar
 
 // Interop para permitir o uso de classes Tailwind em componentes React Native
 cssInterop(View, { className: 'style' });
@@ -93,6 +94,7 @@ export default function Form() {
         console.log('📸 Imagens selecionadas da galeria:', imageUris.length);
       }
     } catch (error) {
+      
       Alert.alert('Erro', 'Não foi possível selecionar as imagens da galeria.');
       console.error('Erro ao selecionar imagens:', error);
     }
@@ -118,7 +120,7 @@ export default function Form() {
 
   const handlelogs = () => {
     if (isSubmitting) return; // Impede navegação durante envio
-    router.push('/main/logs');
+    router.push('/main/Logs');
   };
 
   const takePicture = async () => {
@@ -317,7 +319,7 @@ export default function Form() {
                 // Limpa o formulário antes de navegar
                 setFormData({ container_id: '', description: '' });
                 setSelectedImages([]);
-                router.push('/main/logs');
+                router.push('/main/Logs');
               }
             },
             {
@@ -471,48 +473,59 @@ export default function Form() {
   // Se não autenticado, não renderiza o formulário
   if (!isAuthenticated) {
     return (
-      <SafeAreaView className="flex-1 bg-gray-50 items-center justify-center">
-        <ActivityIndicator size="large" color="#4F46E5" />
-        <Text className="text-gray-600 mt-4">Verificando autenticação...</Text>
+      <SafeAreaView style={{ flex: 1, backgroundColor: '#F8F9FA', alignItems: 'center', justifyContent: 'center' }}>
+        <CustomStatusBar 
+          barStyle="light-content"
+          backgroundColor="#6D7380"
+          translucent={true}
+        />
+        <ActivityIndicator size="large" color="#49C5B6" />
+        <Text className="text-gray-800 mt-4">Verificando autenticação...</Text>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-gray-50 relative">
-      {/* Fundo esmaecido escuro */}
-      <View className="absolute inset-0 bg-gray-200/50 z-40" />
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#F8F9FA', position: 'relative' }}>
+      {/* Usando o CustomStatusBar */}
+      <CustomStatusBar 
+        barStyle="light-content"
+        backgroundColor="#6D7380"
+        translucent={true}
+      />
 
       {/* Card flutuante centralizado */}
       <View className="absolute inset-0 items-center justify-center z-50">
-        <View className="w-[85%] bg-white rounded-2xl shadow-10xl elevation-20 px-6 py-6">
+        <View className="w-[85%] bg-white rounded-3xl shadow-lg px-6 py-6">
           <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
-            <Text className="text-2xl font-bold mb-6">Nova operação</Text>
+            <Text className="text-xl font-bold text-gray-800 mb-5">Nova operação</Text>
 
             {/* Indicador do usuário logado */}
-            <View className="bg-blue-50 px-3 py-2 rounded-lg mb-4">
-              <Text className="text-blue-800 text-sm text-center">
+            <View className="bg-gray-200 px-3 py-2 rounded-lg mb-4">
+              <Text className="text-gray-800 text-sm text-center">
                 Criando como: {user?.cpf}
               </Text>
             </View>
 
-            <Text className="self-start font-medium text-gray-800 mb-2">ID do Container</Text>
+            <Text className="text-sm font-medium text-gray-700 mb-2">ID do Container</Text>
             <TextInput
-              className={`bg-white border border-gray-200 text-gray-900 rounded-lg px-3 py-2.5 w-full mb-6 ${
+              className={`bg-gray-50 border border-gray-300 text-gray-900 rounded-lg px-3 py-2.5 w-full mb-6 ${
                 isSubmitting ? 'opacity-50' : ''
               }`}
               placeholder="Digite o ID do container"
+              placeholderTextColor="#A0AEC0"
               value={formData.container_id}
               onChangeText={(text) => handleChange("container_id", text)}
               editable={!isSubmitting}
             />
 
-            <Text className="self-start font-medium text-gray-800 mb-2">Descrição</Text>
+            <Text className="text-sm font-medium text-gray-700 mb-2">Descrição</Text>
             <TextInput
-              className={`bg-white border border-gray-200 text-gray-900 rounded-lg px-3 py-2.5 w-full mb-6 ${
+              className={`bg-gray-50 border border-gray-300 text-gray-900 rounded-lg px-3 py-2.5 w-full mb-6 ${
                 isSubmitting ? 'opacity-50' : ''
               }`}
               placeholder="Digite uma descrição"
+              placeholderTextColor="#A0AEC0"
               value={formData.description}
               onChangeText={(text) => handleChange("description", text)}
               multiline
@@ -523,7 +536,7 @@ export default function Form() {
 
             <View className="w-full mb-6">
               <View className="flex-row justify-between items-center mb-3">
-                <Text className="font-semibold text-gray-800">Imagens ({selectedImages.length})</Text>
+                <Text className="text-sm font-medium text-gray-700">Imagens ({selectedImages.length})</Text>
                 {selectedImages.length > 0 && !isSubmitting && (
                   <TouchableOpacity
                     className="bg-red-500 px-3 py-1 rounded"
@@ -547,14 +560,14 @@ export default function Form() {
                   <TouchableOpacity
                     className="border-2 border-dashed rounded-lg p-4 items-center justify-center mb-2"
                     style={{ 
-                      borderColor: isSubmitting ? '#ccc' : '#5484dc',
+                      borderColor: isSubmitting ? '#ccc' : '#49C5B6',
                       opacity: isSubmitting ? 0.5 : 1 
                     }}
                     onPress={showImageOptions}
                     disabled={isSubmitting}
                   >
                     <Text 
-                      style={{ color: isSubmitting ? '#ccc' : '#5484dc' }} 
+                      style={{ color: isSubmitting ? '#ccc' : '#49C5B6' }} 
                       className="text-center font-semibold"
                     >
                       + Adicionar mais imagens
@@ -565,20 +578,20 @@ export default function Form() {
                 <TouchableOpacity
                   className="border-2 border-dashed rounded-lg p-8 items-center justify-center"
                   style={{ 
-                    borderColor: isSubmitting ? '#ccc' : '#5484dc',
+                    borderColor: isSubmitting ? '#ccc' : '#49C5B6',
                     opacity: isSubmitting ? 0.5 : 1 
                   }}
                   onPress={showImageOptions}
                   disabled={isSubmitting}
                 >
                   <Text 
-                    style={{ color: isSubmitting ? '#ccc' : '#5484dc' }} 
+                    style={{ color: isSubmitting ? '#ccc' : '#49C5B6' }} 
                     className="text-center mb-2 text-4xl"
                   >
                     📷
                   </Text>
                   <Text 
-                    style={{ color: isSubmitting ? '#ccc' : '#5484dc' }} 
+                    style={{ color: isSubmitting ? '#ccc' : '#49C5B6' }} 
                     className="text-center"
                   >
                     Toque para adicionar imagens
@@ -602,9 +615,10 @@ export default function Form() {
 
               {/* Botão Criar */}
               <TouchableOpacity
-                className={`px-6 py-3 rounded-lg flex-1 items-center justify-center ml-2 ${
-                  isSubmitting ? 'bg-gray-400' : 'bg-indigo-600'
-                }`}
+                className={`px-6 py-3 rounded-lg flex-1 items-center justify-center ml-2`}
+                style={{ 
+                  backgroundColor: isSubmitting ? '#6D7380' : '#49C5B6'
+                }}
                 onPress={handleSubmit}
                 disabled={isSubmitting}
               >

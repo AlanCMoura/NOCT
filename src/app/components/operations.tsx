@@ -21,16 +21,44 @@ interface ListItemProps {
 const ListItem: React.FC<ListItemProps> = ({ data, onPress }) => {
   return (
     <TouchableOpacity 
-      className="bg-white rounded-xl p-4 w-11/12 mx-4 shadow-md border border-gray-100"
+      className="bg-white rounded-xl p-4 w-11/12 mx-4 shadow-md"
+      style={{
+        borderWidth: 1,
+        borderColor: '#E5E7EB',
+        shadowColor: '#2A2E40',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 3,
+        elevation: 3,
+      }}
       onPress={() => onPress && onPress(data)}
+      activeOpacity={0.7}
     >
       <View className="flex-row justify-between items-center">
         <View>
-          <Text className="text-lg font-semibold text-gray-800">{data.operacao}</Text>
-          <Text className="text-sm text-gray-500 mt-1">Container: {data.container}</Text>
+          <Text 
+            className="text-lg font-semibold" 
+            style={{ color: '#2A2E40' }}
+          >
+            {data.operacao}
+          </Text>
+          <Text 
+            className="text-sm mt-1" 
+            style={{ color: '#6D7380' }}
+          >
+            Container: {data.container}
+          </Text>
         </View>
-        <View className="bg-indigo-100 px-3 py-1 rounded-full">
-          <Text className="text-indigo-700 font-medium">{data.qtde_fotos} fotos</Text>
+        <View 
+          className="px-3 py-1 rounded-full"
+          style={{ backgroundColor: '#F0F9F7' }}
+        >
+          <Text 
+            className="font-medium" 
+            style={{ color: '#2A2E40' }}
+          >
+            {data.qtde_fotos} fotos
+          </Text>
         </View>
       </View>
     </TouchableOpacity>

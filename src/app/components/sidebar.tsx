@@ -70,15 +70,16 @@ const Sidebar: React.FC<SidebarProps> = ({
           duration: 300,
           useNativeDriver: true,
         }),
-      ]).start();
-
-      setSidebarOpen(false);
+      ]).start(() => {
+        // Callback para garantir que o estado seja atualizado após a animação
+        setSidebarOpen(false);
+      });
     }
   };
 
   const handleOptionPress = (option: SidebarMenuOption) => {
     if (option === 'signup') {
-      router.replace('/register');
+      router.replace('/Register');
     }
     
     if (onOptionSelect) {
@@ -87,41 +88,68 @@ const Sidebar: React.FC<SidebarProps> = ({
     closeSidebar();
   };
 
+  // Sempre renderiza, mas com pointerEvents baseado no estado
   return (
-    <>
-      {/* Animated Overlay */}
+    <View 
+      style={{ 
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        zIndex: 99999,
+        pointerEvents: sidebarOpen ? 'auto' : 'none',
+      }}
+    >
+      {/* Animated Overlay - Atrás da sidebar */}
       <Animated.View
-        className="absolute w-full h-full bg-black/30 z-30"
-        style={{ opacity: overlayOpacity, pointerEvents: sidebarOpen ? 'auto' : 'none' }}
+        className="absolute w-full h-full"
+        style={{ 
+          opacity: overlayOpacity, 
+          backgroundColor: 'rgba(42, 46, 64, 0.5)', // Cor da paleta com transparência
+          zIndex: 1, // Z-index baixo para ficar atrás da sidebar
+        }}
       >
         <TouchableWithoutFeedback onPress={closeSidebar}>
           <View className="w-full h-full" />
         </TouchableWithoutFeedback>
       </Animated.View>
 
-      {/* Sidebar */}
+      {/* Sidebar - Z-index mais alto que o overlay */}
       <Animated.View
-        className="absolute left-0 w-64 h-full bg-gray-50 z-40 shadow-lg mt-7"
-        style={{ transform: [{ translateX: translateX }] }}
+        className="absolute left-0 w-64 h-full bg-white"
+        style={{ 
+          transform: [{ translateX: translateX }],
+          paddingTop: 44, // Espaçamento para status bar no iOS
+          shadowColor: '#2A2E40',
+          shadowOffset: { width: 2, height: 0 },
+          shadowOpacity: 0.3,
+          shadowRadius: 10,
+          elevation: 10, // Elevation moderada no Android
+          zIndex: 2, // Z-index mais alto que o overlay
+        }}
       >
-        <ScrollView className="h-full px-3 py-4">
-          <View className="my-2">
+        <ScrollView className="h-full px-3">
+          <View>
             {/* Operações */}
             <TouchableOpacity 
-              className={`flex-row items-center p-3 rounded-lg mb-2 ${
-                activeOption === 'operations' 
-                  ? 'bg-indigo-100 border border-indigo-300' 
-                  : 'bg-white hover:bg-slate-100'
-              }`}
+              className={`flex-row items-center p-3 rounded-lg mb-2`}
+              style={{
+                backgroundColor: activeOption === 'operations' ? '#F0F9F7' : '#FFFFFF',
+                borderWidth: activeOption === 'operations' ? 1 : 0,
+                borderColor: activeOption === 'operations' ? '#49C5B6' : 'transparent',
+              }}
               onPress={() => handleOptionPress('operations')}
+              activeOpacity={0.7}
             >
               <OperationsIcon 
-                fill={activeOption === 'operations' ? '#4338ca' : '#374151'} 
+                fill="#2A2E40"
               />
               <Text 
-                className={`ml-3 text-base font-medium flex-1 ${
-                  activeOption === 'operations' ? 'text-indigo-700' : 'text-gray-900'
-                }`}
+                className="ml-3 text-base font-medium flex-1"
+                style={{ 
+                  color: activeOption === 'operations' ? '#49C5B6' : '#2A2E40' 
+                }}
               >
                 Operações
               </Text>
@@ -129,20 +157,23 @@ const Sidebar: React.FC<SidebarProps> = ({
 
             {/* Inspetores */}
             <TouchableOpacity 
-              className={`flex-row items-center p-3 rounded-lg mb-2 ${
-                activeOption === 'inspectors' 
-                  ? 'bg-indigo-100 border border-indigo-300' 
-                  : 'bg-white hover:bg-slate-100'
-              }`}
+              className={`flex-row items-center p-3 rounded-lg mb-2`}
+              style={{
+                backgroundColor: activeOption === 'inspectors' ? '#F0F9F7' : '#FFFFFF',
+                borderWidth: activeOption === 'inspectors' ? 1 : 0,
+                borderColor: activeOption === 'inspectors' ? '#49C5B6' : 'transparent',
+              }}
               onPress={() => handleOptionPress('inspectors')}
+              activeOpacity={0.7}
             >
               <InspectorsIcon 
-                fill={activeOption === 'inspectors' ? '#4338ca' : '#374151'} 
+                fill="#2A2E40"
               />
               <Text 
-                className={`ml-3 text-base font-medium flex-1 ${
-                  activeOption === 'inspectors' ? 'text-indigo-700' : 'text-gray-900'
-                }`}
+                className="ml-3 text-base font-medium flex-1"
+                style={{ 
+                  color: activeOption === 'inspectors' ? '#49C5B6' : '#2A2E40' 
+                }}
               >
                 Inspetores
               </Text>
@@ -150,20 +181,23 @@ const Sidebar: React.FC<SidebarProps> = ({
 
             {/* Cadastrar Usuário */}
             <TouchableOpacity 
-              className={`flex-row items-center p-3 rounded-lg mb-2 ${
-                activeOption === 'signup' 
-                  ? 'bg-indigo-100 border border-indigo-300' 
-                  : 'bg-white hover:bg-slate-100'
-              }`}
+              className={`flex-row items-center p-3 rounded-lg mb-2`}
+              style={{
+                backgroundColor: activeOption === 'signup' ? '#F0F9F7' : '#FFFFFF',
+                borderWidth: activeOption === 'signup' ? 1 : 0,
+                borderColor: activeOption === 'signup' ? '#49C5B6' : 'transparent',
+              }}
               onPress={() => handleOptionPress('signup')}
+              activeOpacity={0.7}
             >
               <SignUpIcon 
-                fill={activeOption === 'signup' ? '#4338ca' : '#374151'} 
+                fill="#2A2E40"
               />
               <Text 
-                className={`ml-3 text-base font-medium flex-1 ${
-                  activeOption === 'signup' ? 'text-indigo-700' : 'text-gray-900'
-                }`}
+                className="ml-3 text-base font-medium flex-1"
+                style={{ 
+                  color: activeOption === 'signup' ? '#49C5B6' : '#2A2E40' 
+                }}
               >
                 Cadastrar Usuário
               </Text>
@@ -172,7 +206,7 @@ const Sidebar: React.FC<SidebarProps> = ({
           </View>
         </ScrollView>
       </Animated.View>
-    </>
+    </View>
   );
 };
 

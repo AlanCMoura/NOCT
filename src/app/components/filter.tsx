@@ -261,7 +261,7 @@ const FilterButton: React.FC<FilterButtonProps> = ({
   );
 };
 
-// Estilos atualizados
+// Estilos atualizados com a paleta de cores
 const styles = StyleSheet.create({
   container: {
     alignItems: 'center',
@@ -270,7 +270,7 @@ const styles = StyleSheet.create({
   filterButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#818cf8',
+    backgroundColor: '#49C5B6', // Verde-água da paleta
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 8,
@@ -284,15 +284,16 @@ const styles = StyleSheet.create({
     width: 20,
     height: 28,
     marginRight: 6,
+    tintColor: '#2A2E40', // Ícone em azul grafite da paleta
   },
   activeIndicator: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
   },
   activeIndicatorText: {
-    color: 'white',
+    color: 'black',
     fontSize: 10,
     fontWeight: '500',
   },
@@ -306,7 +307,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(42, 46, 64, 0.5)', // Overlay com tom da paleta
   },
   modalContent: {
     backgroundColor: 'white',
@@ -324,7 +325,7 @@ const styles = StyleSheet.create({
   handleBar: {
     width: 40,
     height: 4,
-    backgroundColor: '#d1d5db',
+    backgroundColor: '#6D7380', // Cinza lavanda da paleta
     borderRadius: 4,
     alignSelf: 'center',
     marginBottom: 16,
@@ -333,11 +334,11 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: 'bold',
     marginBottom: 8,
-    color: '#1f2937',
+    color: '#2A2E40', // Azul grafite da paleta
   },
   modalSubtitle: {
     fontSize: 14,
-    color: '#6b7280',
+    color: '#6D7380', // Cinza lavanda da paleta
     marginBottom: 20,
   },
   optionButton: {
@@ -348,12 +349,12 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     borderWidth: 2,
     borderRadius: 12,
-    borderColor: '#e5e7eb',
-    backgroundColor: '#f9fafb',
+    borderColor: '#E5E7EB',
+    backgroundColor: '#F9FAFB',
   },
   selectedOptionButton: {
-    backgroundColor: '#eff6ff',
-    borderColor: '#3b82f6',
+    backgroundColor: '#F0F9F7', // Tom claro do verde-água
+    borderColor: '#49C5B6', // Verde-água da paleta
   },
   optionContent: {
     flex: 1,
@@ -361,25 +362,25 @@ const styles = StyleSheet.create({
   optionText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#374151',
+    color: '#2A2E40', // Azul grafite da paleta
     marginBottom: 4,
   },
   selectedOptionText: {
-    color: '#3b82f6',
+    color: '#49C5B6', // Verde-água da paleta
   },
   optionDescription: {
     fontSize: 13,
-    color: '#6b7280',
+    color: '#6D7380', // Cinza lavanda da paleta
     lineHeight: 18,
   },
   selectedOptionDescription: {
-    color: '#60a5fa',
+    color: '#3DA89F', // Tom mais escuro do verde-água
   },
   checkmark: {
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: '#3b82f6',
+    backgroundColor: '#49C5B6', // Verde-água da paleta
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -394,18 +395,18 @@ const styles = StyleSheet.create({
     marginTop: 20,
     paddingTop: 16,
     borderTopWidth: 1,
-    borderTopColor: '#e5e7eb',
+    borderTopColor: '#E5E7EB',
   },
   cancelButton: {
-    backgroundColor: '#f3f4f6',
+    backgroundColor: '#F3F4F6',
     paddingHorizontal: 32,
     paddingVertical: 12,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#d1d5db',
+    borderColor: '#6D7380', // Cinza lavanda da paleta
   },
   cancelButtonText: {
-    color: '#374151',
+    color: '#2A2E40', // Azul grafite da paleta
     fontWeight: '600',
     fontSize: 14,
   },

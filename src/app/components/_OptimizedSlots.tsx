@@ -83,3 +83,5 @@ export const OptimizedImageSlot: React.FC<OptimizedImageSlotProps> = ({
     </TouchableOpacity>
   );
 };
+
+export default function() { return null; }

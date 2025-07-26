@@ -13,14 +13,13 @@ import {
   TouchableWithoutFeedback,
   Keyboard,
   Switch,
-  StatusBar,
   Alert,
   ActivityIndicator,
 } from 'react-native';
 import { cssInterop } from "nativewind";
-import { LinearGradient } from 'expo-linear-gradient';
 import { Picker } from '@react-native-picker/picker';
-import { useAuth, useAuthenticatedFetch } from './contexts/AuthContext'; // Ajuste o caminho
+import { useAuth, useAuthenticatedFetch } from './contexts/_AuthContext';
+import CustomStatusBar from './components/StatusBar'; // Importando o componente CustomStatusBar
 
 // Aplicando cssInterop para todos os componentes que vamos estilizar
 cssInterop(Text, {
@@ -59,11 +58,6 @@ cssInterop(ScrollView, {
   },
 });
 cssInterop(KeyboardAvoidingView, {
-  className: {
-    target: "style",
-  },
-});
-cssInterop(LinearGradient, {
   className: {
     target: "style",
   },
@@ -115,15 +109,6 @@ export default function RegisterScreen() {
       });
     }
   }, [user, token, isAuthenticated]);
-
-  // Configure status bar to match gradient background
-  useEffect(() => {
-    StatusBar.setBarStyle('light-content');
-    if (Platform.OS === 'android') {
-      StatusBar.setBackgroundColor('#5583D9');
-      StatusBar.setTranslucent(true);
-    }
-  }, []);
 
   // Format CPF input
   const formatCPF = (value: string): string => {
@@ -292,7 +277,7 @@ export default function RegisterScreen() {
                 if (router.canGoBack()) {
                   router.back();
                 } else {
-                  router.replace('/main/logs'); // ou sua tela principal
+                  router.replace('/main/Logs'); // ou sua tela principal
                 }
               }
             }
@@ -328,9 +313,14 @@ export default function RegisterScreen() {
   // Loading state while checking authentication
   if (authLoading) {
     return (
-      <View className="flex-1 justify-center items-center bg-blue-500">
-        <ActivityIndicator size="large" color="#FFFFFF" />
-        <Text className="text-white mt-4">Verificando autenticação...</Text>
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F8F9FA' }}>
+        <CustomStatusBar 
+          barStyle="light-content"
+          backgroundColor="#6D7380"
+          translucent={true}
+        />
+        <ActivityIndicator size="large" color="#5583D9" />
+        <Text className="text-gray-800 mt-4">Verificando autenticação...</Text>
       </View>
     );
   }
@@ -341,193 +331,184 @@ export default function RegisterScreen() {
   }
 
   return (
-    <View className="flex-1">
-      <StatusBar />
-      <LinearGradient
-        colors={['#5583D9', '#5578D9']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
+    <View style={{ flex: 1, backgroundColor: '#F8F9FA' }}>
+      {/* Usando o CustomStatusBar com configurações específicas */}
+      <CustomStatusBar 
+        barStyle="light-content"
+        backgroundColor="#6D7380"
+        translucent={true}
+      />
+      
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         className="flex-1"
       >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          className="flex-1"
-        >
-          <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-            <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
-              <SafeAreaView className="flex-1 items-center justify-center px-5 py-10">
-                <Image
-                  source={require('./images/coruja.png')}
-                  className="w-24 h-24 mb-1 mt-10"
-                  resizeMode="contain"
-                />
-                <Text className="text-2xl font-bold text-black mb-2">NOCT</Text>
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
+            <SafeAreaView className="flex-1 items-center justify-center px-5 py-10">               
+              {/* Header com informações do usuário logado */}
+              <View className="bg-gray-200 rounded-lg px-4 py-2 mb-4 mt-4">
+                <Text className="text-gray-800 text-sm text-center">
+                  Logado como: {user?.cpf}
+                </Text>
+              </View>
+              
+              <View className="w-96 max-w-md bg-white rounded-3xl shadow-lg px-6 py-6">
+                <Text className="text-xl font-bold text-gray-800 mb-5">
+                  Cadastrar Novo Usuário
+                </Text>
                 
-                {/* Header com informações do usuário logado */}
-                <View className="bg-white/20 rounded-lg px-4 py-2 mb-4">
-                  <Text className="text-white text-sm text-center">
-                    Logado como: {user?.cpf}
-                  </Text>
-                </View>
-                
-                <View className="w-full max-w-md bg-white rounded-lg shadow-lg px-6 py-6">
-                  <Text className="text-xl font-bold text-gray-800 mb-5">
-                    Cadastrar Novo Usuário
-                  </Text>
+                <View className="space-y-4">
+                  <View>
+                    <Text className="text-sm font-medium text-gray-700 mb-2">Nome</Text>
+                    <TextInput
+                      className="bg-gray-50 border border-gray-300 text-gray-900 rounded-lg px-3 py-2.5 w-full"
+                      placeholder="Digite o nome"
+                      placeholderTextColor="#A0AEC0"
+                      value={firstName}
+                      onChangeText={(text: string) => setFirstName(text)}
+                      autoCapitalize="words"
+                      editable={!isSubmitting}
+                    />
+                  </View>
+
+                  <View>
+                    <Text className="text-sm font-medium text-gray-700 mb-2 mt-3">Sobrenome</Text>
+                    <TextInput
+                      className="bg-gray-50 border border-gray-300 text-gray-900 rounded-lg px-3 py-2.5 w-full"
+                      placeholder="Digite o sobrenome"
+                      placeholderTextColor="#A0AEC0"
+                      value={lastName}
+                      onChangeText={(text: string) => setLastName(text)}
+                      autoCapitalize="words"
+                      editable={!isSubmitting}
+                    />
+                  </View>
+
+                  <View>
+                    <Text className="text-sm font-medium text-gray-700 mb-2 mt-3">CPF</Text>
+                    <TextInput
+                      className="bg-gray-50 border border-gray-300 text-gray-900 rounded-lg px-3 py-2.5 w-full"
+                      placeholder="000.000.000-00"
+                      placeholderTextColor="#A0AEC0"
+                      value={cpf}
+                      onChangeText={handleCPFChange}
+                      keyboardType="numeric"
+                      maxLength={14}
+                      editable={!isSubmitting}
+                    />
+                  </View>
                   
-                  <View className="space-y-4">
-                    <View>
-                      <Text className="text-sm font-medium text-gray-700 mb-2">Nome</Text>
-                      <TextInput
-                        className="bg-gray-50 border border-gray-300 text-gray-900 rounded-lg px-3 py-2.5 w-full"
-                        placeholder="Digite o nome"
-                        placeholderTextColor="#A0AEC0"
-                        value={firstName}
-                        onChangeText={(text: string) => setFirstName(text)}
-                        autoCapitalize="words"
-                        editable={!isSubmitting}
-                      />
-                    </View>
+                  <View>
+                    <Text className="text-sm font-medium text-gray-700 mb-2 mt-3">Email</Text>
+                    <TextInput
+                      className="bg-gray-50 border border-gray-300 text-gray-900 rounded-lg px-3 py-2.5 w-full"
+                      placeholder="nome@exemplo.com"
+                      placeholderTextColor="#A0AEC0"
+                      value={email}
+                      onChangeText={(text: string) => setEmail(text)}
+                      keyboardType="email-address"
+                      autoCapitalize="none"
+                      editable={!isSubmitting}
+                    />
+                  </View>
+                  
+                  <View>
+                    <Text className="text-sm font-medium text-gray-700 mb-2 mt-3">Senha</Text>
+                    <TextInput
+                      className="bg-gray-50 border border-gray-300 text-gray-900 rounded-lg px-3 py-2.5 w-full"
+                      placeholder="••••••••"
+                      placeholderTextColor="#A0AEC0"
+                      value={password}
+                      onChangeText={(text: string) => setPassword(text)}
+                      secureTextEntry
+                      editable={!isSubmitting}
+                    />
+                  </View>
 
-                    <View>
-                      <Text className="text-sm font-medium text-gray-700 mb-2 mt-3">Sobrenome</Text>
-                      <TextInput
-                        className="bg-gray-50 border border-gray-300 text-gray-900 rounded-lg px-3 py-2.5 w-full"
-                        placeholder="Digite o sobrenome"
-                        placeholderTextColor="#A0AEC0"
-                        value={lastName}
-                        onChangeText={(text: string) => setLastName(text)}
-                        autoCapitalize="words"
-                        editable={!isSubmitting}
-                      />
-                    </View>
+                  <View>
+                    <Text className="text-sm font-medium text-gray-700 mb-2 mt-3">Confirmar Senha</Text>
+                    <TextInput
+                      className="bg-gray-50 border border-gray-300 text-gray-900 rounded-lg px-3 py-2.5 w-full"
+                      placeholder="••••••••"
+                      placeholderTextColor="#A0AEC0"
+                      value={confirmPassword}
+                      onChangeText={(text: string) => setConfirmPassword(text)}
+                      secureTextEntry
+                      editable={!isSubmitting}
+                    />
+                  </View>
 
-                    <View>
-                      <Text className="text-sm font-medium text-gray-700 mb-2 mt-3">CPF</Text>
-                      <TextInput
-                        className="bg-gray-50 border border-gray-300 text-gray-900 rounded-lg px-3 py-2.5 w-full"
-                        placeholder="000.000.000-00"
-                        placeholderTextColor="#A0AEC0"
-                        value={cpf}
-                        onChangeText={handleCPFChange}
-                        keyboardType="numeric"
-                        maxLength={14}
-                        editable={!isSubmitting}
+                  <View>
+                    <Text className="text-sm font-medium text-gray-700 mb-2 mt-3">Função</Text>
+                    <View className="bg-gray-50 border border-gray-300 rounded-lg">
+                      <Picker
+                        selectedValue={role}
+                        onValueChange={(itemValue: string) => setRole(itemValue)}
+                        style={{ height: 50 }}
+                        enabled={!isSubmitting}
+                      >
+                        <Picker.Item label="Inspetor" value="INSPETOR" />
+                        <Picker.Item label="Administrador" value="ADMIN" />
+                        <Picker.Item label="Gerente" value="GERENTE" />
+                      </Picker>
+                    </View>
+                  </View>
+                  
+                  <View className="flex-row justify-between items-center mt-5">
+                    <View className="flex-row items-center">
+                      <Switch
+                        value={twoFactorEnabled}
+                        onValueChange={(value: boolean) => setTwoFactorEnabled(value)}
+                        trackColor={{ false: "#E2E8F0", true: "#49C5B6" }}
+                        thumbColor={twoFactorEnabled ? "#5046E5" : "#f4f3f4"}
+                        disabled={isSubmitting}
                       />
+                      <Text className="ml-2 text-sm text-gray-600">
+                        Habilitar autenticação de dois fatores
+                      </Text>
                     </View>
-                    
-                    <View>
-                      <Text className="text-sm font-medium text-gray-700 mb-2 mt-3">Email</Text>
-                      <TextInput
-                        className="bg-gray-50 border border-gray-300 text-gray-900 rounded-lg px-3 py-2.5 w-full"
-                        placeholder="nome@exemplo.com"
-                        placeholderTextColor="#A0AEC0"
-                        value={email}
-                        onChangeText={(text: string) => setEmail(text)}
-                        keyboardType="email-address"
-                        autoCapitalize="none"
-                        editable={!isSubmitting}
-                      />
-                    </View>
-                    
-                    <View>
-                      <Text className="text-sm font-medium text-gray-700 mb-2 mt-3">Senha</Text>
-                      <TextInput
-                        className="bg-gray-50 border border-gray-300 text-gray-900 rounded-lg px-3 py-2.5 w-full"
-                        placeholder="••••••••"
-                        placeholderTextColor="#A0AEC0"
-                        value={password}
-                        onChangeText={(text: string) => setPassword(text)}
-                        secureTextEntry
-                        editable={!isSubmitting}
-                      />
-                    </View>
-
-                    <View>
-                      <Text className="text-sm font-medium text-gray-700 mb-2 mt-3">Confirmar Senha</Text>
-                      <TextInput
-                        className="bg-gray-50 border border-gray-300 text-gray-900 rounded-lg px-3 py-2.5 w-full"
-                        placeholder="••••••••"
-                        placeholderTextColor="#A0AEC0"
-                        value={confirmPassword}
-                        onChangeText={(text: string) => setConfirmPassword(text)}
-                        secureTextEntry
-                        editable={!isSubmitting}
-                      />
-                    </View>
-
-                    <View>
-                      <Text className="text-sm font-medium text-gray-700 mb-2 mt-3">Função</Text>
-                      <View className="bg-gray-50 border border-gray-300 rounded-lg">
-                        <Picker
-                          selectedValue={role}
-                          onValueChange={(itemValue: string) => setRole(itemValue)}
-                          style={{ height: 50 }}
-                          enabled={!isSubmitting}
-                        >
-                          <Picker.Item label="Inspetor" value="INSPETOR" />
-                          <Picker.Item label="Administrador" value="ADMIN" />
-                          <Picker.Item label="Gerente" value="GERENTE" />
-                        </Picker>
-                      </View>
-                    </View>
-                    
-                    <View className="flex-row justify-between items-center mt-5">
-                      <View className="flex-row items-center">
-                        <Switch
-                          value={twoFactorEnabled}
-                          onValueChange={(value: boolean) => setTwoFactorEnabled(value)}
-                          trackColor={{ false: "#E2E8F0", true: "#7F9CF5" }}
-                          thumbColor={twoFactorEnabled ? "#4C51BF" : "#f4f3f4"}
-                          disabled={isSubmitting}
-                        />
-                        <Text className="ml-2 text-sm text-gray-600">
-                          Habilitar autenticação de dois fatores
-                        </Text>
-                      </View>
-                    </View>
-                    
-                    <TouchableOpacity
-                      className={`w-full rounded-lg px-4 py-3 mt-5 ${
-                        isSubmitting 
-                          ? 'bg-gray-400' 
-                          : 'bg-indigo-600 hover:bg-indigo-700'
-                      }`}
+                  </View>
+                  
+                  <TouchableOpacity
+                    className={`w-full rounded-lg px-4 py-3 mt-5 mb-1`}
+                      style={{ 
+                        backgroundColor:'#49C5B6', // Verde-água como cor principal do botão
+                      }}
                       activeOpacity={0.8}
                       onPress={handleRegister}
                       disabled={isSubmitting}
-                    >
-                      {isSubmitting ? (
-                        <View className="flex-row justify-center items-center">
-                          <ActivityIndicator size="small" color="#FFFFFF" />
-                          <Text className="text-white font-semibold ml-2">Cadastrando...</Text>
-                        </View>
-                      ) : (
-                        <Text className="text-white text-center font-semibold">Cadastrar Usuário</Text>
-                      )}
-                    </TouchableOpacity>
-                    
-                    <TouchableOpacity
-                      className="w-full bg-gray-500 hover:bg-gray-600 rounded-lg px-4 py-3 mt-3"
-                      activeOpacity={0.8}
-                      onPress={() => {
-                        if (router.canGoBack()) {
-                          router.back();
-                        } else {
-                          router.replace('/main/logs'); // ou sua tela principal
-                        }
-                      }}
-                      disabled={isSubmitting}
-                    >
-                      <Text className="text-white text-center font-semibold">Voltar</Text>
-                    </TouchableOpacity>
-                  </View>
+                  >
+                    {isSubmitting ? (
+                      <View className="flex-row justify-center items-center">
+                        <ActivityIndicator size="small" color="#FFFFFF" />
+                        <Text className="text-white font-semibold ml-2">Cadastrando...</Text>
+                      </View>
+                    ) : (
+                      <Text className="text-white text-center font-semibold">Cadastrar Usuário</Text>
+                    )}
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity
+                    className="w-full bg-gray-500 hover:bg-gray-600 rounded-lg px-4 py-3 mt-3"
+                    activeOpacity={0.8}
+                    onPress={() => {
+                      if (router.canGoBack()) {
+                        router.back();
+                      } else {
+                        router.replace('/main/Logs'); // ou sua tela principal
+                      }
+                    }}
+                    disabled={isSubmitting}
+                  >
+                    <Text className="text-white text-center font-semibold">Voltar</Text>
+                  </TouchableOpacity>
                 </View>
-              </SafeAreaView>
-            </ScrollView>
-          </TouchableWithoutFeedback>
-        </KeyboardAvoidingView>
-      </LinearGradient>
+              </View>
+            </SafeAreaView>
+          </ScrollView>
+        </TouchableWithoutFeedback>
+      </KeyboardAvoidingView>
     </View>
   );
 }

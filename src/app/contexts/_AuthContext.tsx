@@ -122,7 +122,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setRequiresTwoFactor(false);
         
         // Navega para tela principal
-        router.replace('/main/logs');
+        router.replace('/main/Logs');
         
         return true;
       }
@@ -206,7 +206,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       console.log('🎯 Token definitivo configurado - redirecionando para app');
       
       // Navega para tela principal
-      router.replace('/main/logs');
+      router.replace('/main/Logs');
       
       return true;
       
@@ -360,3 +360,5 @@ export const useAuthenticatedFetch = () => {
 
   return authenticatedFetch;
 };
+
+export default function() { return null; }

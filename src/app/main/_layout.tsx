@@ -7,8 +7,8 @@ export default function MainLayout() {
         headerShown: false, // Sem headers
       }}
     >
-      <Stack.Screen name="logs" />
-      <Stack.Screen name="form" />
+      <Stack.Screen name="Logs" />
+      <Stack.Screen name="Form" />
     </Stack>
   );
 }
