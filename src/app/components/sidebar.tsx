@@ -1,9 +1,10 @@
 // components/Sidebar.tsx
 import React from 'react';
-import { View, Text, TouchableOpacity, ScrollView, Animated, TouchableWithoutFeedback } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, Animated, TouchableWithoutFeedback, Alert } from 'react-native';
 import { Svg, Path } from 'react-native-svg';
 import { cssInterop } from 'nativewind';
 import { router } from 'expo-router';
+import { useAuth } from '../contexts/_AuthContext'; // Ajuste o caminho conforme necessário
 
 // Interop for Tailwind classes
 cssInterop(Animated.View, { className: 'style' });
@@ -34,6 +35,13 @@ const SignUpIcon = ({ width = 25, height = 20, fill = "#000000" }) => (
   </Svg>
 );
 
+// Ícone para Logout (Sign Out)
+const LogoutIcon = ({ width = 25, height = 20, fill = "#000000" }) => (
+  <Svg width={width} height={height} viewBox="0 0 512 512" fill={fill}>
+    <Path d="M377.9 105.9L500.7 228.7c7.2 7.2 11.3 17.1 11.3 27.3s-4.1 20.1-11.3 27.3L377.9 406.1c-6.4 6.4-15 9.9-24 9.9c-18.7 0-33.9-15.2-33.9-33.9l0-62.1-128 0c-17.7 0-32-14.3-32-32l0-64c0-17.7 14.3-32 32-32l128 0 0-62.1c0-18.7 15.2-33.9 33.9-33.9c9 0 17.6 3.6 24 9.9zM160 96L96 96c-17.7 0-32 14.3-32 32l0 256c0 17.7 14.3 32 32 32l64 0c17.7 0 32 14.3 32 32s-14.3 32-32 32l-64 0c-53 0-96-43-96-96L0 128C0 75 43 32 96 32l64 0c17.7 0 32 14.3 32 32s-14.3 32-32 32z"/>
+  </Svg>
+);
+
 // Define sidebar menu options type
 export type SidebarMenuOption = 'operations' | 'inspectors' | 'signup';
 
@@ -57,6 +65,8 @@ const Sidebar: React.FC<SidebarProps> = ({
   activeOption,
   onOptionSelect
 }) => {
+  const { logout, user } = useAuth();
+
   const closeSidebar = () => {
     if (sidebarOpen) {
       Animated.parallel([
@@ -86,6 +96,31 @@ const Sidebar: React.FC<SidebarProps> = ({
       onOptionSelect(option);
     }
     closeSidebar();
+  };
+
+  const handleLogout = () => {
+    Alert.alert(
+      'Encerrar Sessão',
+      'Você será desconectado. Deseja continuar?',
+      [
+        {
+          text: 'Cancelar',
+          style: 'cancel',
+        },
+        {
+          text: 'Encerrar Sessão',
+          style: 'destructive',
+          onPress: async () => {
+            closeSidebar();
+            await logout();
+          },
+        },
+      ],
+      { 
+        cancelable: true,
+        userInterfaceStyle: 'light' 
+      }
+    );
   };
 
   // Sempre renderiza, mas com pointerEvents baseado no estado
@@ -129,80 +164,113 @@ const Sidebar: React.FC<SidebarProps> = ({
           zIndex: 2, // Z-index mais alto que o overlay
         }}
       >
-        <ScrollView className="h-full px-3">
-          <View>
-            {/* Operações */}
-            <TouchableOpacity 
-              className={`flex-row items-center p-3 rounded-lg mb-2`}
-              style={{
-                backgroundColor: activeOption === 'operations' ? '#F0F9F7' : '#FFFFFF',
-                borderWidth: activeOption === 'operations' ? 1 : 0,
-                borderColor: activeOption === 'operations' ? '#49C5B6' : 'transparent',
-              }}
-              onPress={() => handleOptionPress('operations')}
-              activeOpacity={0.7}
-            >
-              <OperationsIcon 
-                fill="#2A2E40"
-              />
-              <Text 
-                className="ml-3 text-base font-medium flex-1"
-                style={{ 
-                  color: activeOption === 'operations' ? '#49C5B6' : '#2A2E40' 
+        <ScrollView className="flex-1 px-3">
+          <View className="flex-1">
+            {/* Menu Principal */}
+            <View>
+              {/* Operações */}
+              <TouchableOpacity 
+                className={`flex-row items-center p-3 rounded-lg mb-2`}
+                style={{
+                  backgroundColor: activeOption === 'operations' ? '#F0F9F7' : '#FFFFFF',
+                  borderWidth: activeOption === 'operations' ? 1 : 0,
+                  borderColor: activeOption === 'operations' ? '#49C5B6' : 'transparent',
                 }}
+                onPress={() => handleOptionPress('operations')}
+                activeOpacity={0.7}
               >
-                Operações
-              </Text>
-            </TouchableOpacity> 
+                <OperationsIcon 
+                  fill="#2A2E40"
+                />
+                <Text 
+                  className="ml-3 text-base font-medium flex-1"
+                  style={{ 
+                    color: activeOption === 'operations' ? '#49C5B6' : '#2A2E40' 
+                  }}
+                >
+                  Operações
+                </Text>
+              </TouchableOpacity> 
 
-            {/* Inspetores */}
-            <TouchableOpacity 
-              className={`flex-row items-center p-3 rounded-lg mb-2`}
-              style={{
-                backgroundColor: activeOption === 'inspectors' ? '#F0F9F7' : '#FFFFFF',
-                borderWidth: activeOption === 'inspectors' ? 1 : 0,
-                borderColor: activeOption === 'inspectors' ? '#49C5B6' : 'transparent',
-              }}
-              onPress={() => handleOptionPress('inspectors')}
-              activeOpacity={0.7}
-            >
-              <InspectorsIcon 
-                fill="#2A2E40"
-              />
-              <Text 
-                className="ml-3 text-base font-medium flex-1"
-                style={{ 
-                  color: activeOption === 'inspectors' ? '#49C5B6' : '#2A2E40' 
+              {/* Inspetores */}
+              <TouchableOpacity 
+                className={`flex-row items-center p-3 rounded-lg mb-2`}
+                style={{
+                  backgroundColor: activeOption === 'inspectors' ? '#F0F9F7' : '#FFFFFF',
+                  borderWidth: activeOption === 'inspectors' ? 1 : 0,
+                  borderColor: activeOption === 'inspectors' ? '#49C5B6' : 'transparent',
                 }}
+                onPress={() => handleOptionPress('inspectors')}
+                activeOpacity={0.7}
               >
-                Inspetores
-              </Text>
-            </TouchableOpacity>
+                <InspectorsIcon 
+                  fill="#2A2E40"
+                />
+                <Text 
+                  className="ml-3 text-base font-medium flex-1"
+                  style={{ 
+                    color: activeOption === 'inspectors' ? '#49C5B6' : '#2A2E40' 
+                  }}
+                >
+                  Inspetores
+                </Text>
+              </TouchableOpacity>
 
-            {/* Cadastrar Usuário */}
-            <TouchableOpacity 
-              className={`flex-row items-center p-3 rounded-lg mb-2`}
-              style={{
-                backgroundColor: activeOption === 'signup' ? '#F0F9F7' : '#FFFFFF',
-                borderWidth: activeOption === 'signup' ? 1 : 0,
-                borderColor: activeOption === 'signup' ? '#49C5B6' : 'transparent',
-              }}
-              onPress={() => handleOptionPress('signup')}
-              activeOpacity={0.7}
-            >
-              <SignUpIcon 
-                fill="#2A2E40"
-              />
-              <Text 
-                className="ml-3 text-base font-medium flex-1"
-                style={{ 
-                  color: activeOption === 'signup' ? '#49C5B6' : '#2A2E40' 
+              {/* Cadastrar Usuário */}
+              <TouchableOpacity 
+                className={`flex-row items-center p-3 rounded-lg mb-2`}
+                style={{
+                  backgroundColor: activeOption === 'signup' ? '#F0F9F7' : '#FFFFFF',
+                  borderWidth: activeOption === 'signup' ? 1 : 0,
+                  borderColor: activeOption === 'signup' ? '#49C5B6' : 'transparent',
                 }}
+                onPress={() => handleOptionPress('signup')}
+                activeOpacity={0.7}
               >
-                Cadastrar Usuário
-              </Text>
-            </TouchableOpacity>
-            
+                <SignUpIcon 
+                  fill="#2A2E40"
+                />
+                <Text 
+                  className="ml-3 text-base font-medium flex-1"
+                  style={{ 
+                    color: activeOption === 'signup' ? '#49C5B6' : '#2A2E40' 
+                  }}
+                >
+                  Cadastrar Usuário
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Seção Inferior - Logout */}
+            <View className="mt-auto pb-4">
+              {/* Linha divisória */}
+              <View 
+                className="h-px mb-4"
+                style={{ backgroundColor: '#E5E7EB' }}
+              />
+
+              {/* Botão de Logout */}
+              <TouchableOpacity 
+                className="flex-row items-center p-3 rounded-lg mb-2"
+                style={{
+                  backgroundColor: '#FFFFFF',
+                  borderWidth: 0,
+                  borderColor: 'transparent',
+                }}
+                onPress={handleLogout}
+                activeOpacity={0.7}
+              >
+                <LogoutIcon 
+                  fill="#2A2E40"
+                />
+                <Text 
+                  className="ml-3 text-base font-medium flex-1"
+                  style={{ color: '#2A2E40' }}
+                >
+                  Sair
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </ScrollView>
       </Animated.View>
