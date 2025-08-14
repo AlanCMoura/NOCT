@@ -155,9 +155,6 @@ export default function Form() {
     }
   };
 
-  const toggleCameraFacing = () => {
-    setFacing(current => (current === 'back' ? 'front' : 'back'));
-  };
 
   const closeCamera = () => setShowCamera(false);
 
@@ -310,7 +307,7 @@ export default function Form() {
 
         Alert.alert(
           'Sucesso',
-          `Operação criada com sucesso!\n\nID: ${operation.id}\nContainer: ${operation.containerId}\nImagens: ${operation.containerImages?.length || 0}`,
+          `Operação criada com sucesso!`,
           [
             {
               text: 'Ver Operações',
@@ -431,12 +428,6 @@ export default function Form() {
               </Text>
             </View>
 
-            <TouchableOpacity
-              className="bg-white/20 p-3 rounded-full"
-              onPress={toggleCameraFacing}
-            >
-              <Text className="text-white font-bold text-lg">🔄</Text>
-            </TouchableOpacity>
           </View>
 
           {/* Área flexível para empurrar os controles para baixo */}
