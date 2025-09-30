@@ -1,5 +1,7 @@
 // src/hooks/useContainerImages.ts
 import { useState, useEffect } from 'react';
+import { API_BASE_URL, API_ENABLED } from '../../config/apiConfig';
+import { getMockContainerImages } from '../../mocks/mockOperations';
 
 interface UseContainerImagesProps {
   containerId: string;
@@ -21,11 +23,17 @@ export const useContainerImages = ({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
-  const baseUrl = 'http://containerview-prod.us-east-1.elasticbeanstalk.com';
-  
   const fetchImages = async () => {
     if (!containerId) {
       setError('Container ID não fornecido');
+      setLoading(false);
+      return;
+    }
+    
+    if (!API_ENABLED) {
+      const mockImages = getMockContainerImages(containerId);
+      setPresignedUrls(mockImages);
+      setError(null);
       setLoading(false);
       return;
     }
@@ -38,7 +46,7 @@ export const useContainerImages = ({
       console.log(`🔐 Usando requisição autenticada (imageFetch com token)`);
       
       // Esta requisição USA AUTENTICAÇÃO via imageFetch
-      const response = await imageFetch(`${baseUrl}/containers/${containerId}/imagens`);
+      const response = await imageFetch(`${API_BASE_URL}/containers/${containerId}/imagens`);
       
       console.log(`📥 Resposta do endpoint autenticado:`, {
         status: response.status,

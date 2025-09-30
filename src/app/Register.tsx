@@ -20,6 +20,7 @@ import { cssInterop } from "nativewind";
 import { Picker } from '@react-native-picker/picker';
 import { useAuth, useAuthenticatedFetch } from './contexts/_AuthContext';
 import CustomStatusBar from './components/StatusBar'; // Importando o componente CustomStatusBar
+import { API_BASE_URL, API_ENABLED } from './config/apiConfig';
 
 // Aplicando cssInterop para todos os componentes que vamos estilizar
 cssInterop(Text, {
@@ -64,7 +65,6 @@ cssInterop(KeyboardAvoidingView, {
 });
 
 // Configuração da API - mesma URL do AuthContext
-const API_BASE_URL = 'http://containerview-prod.us-east-1.elasticbeanstalk.com';
 
 export default function RegisterScreen() {
   // Estados do formulário
@@ -235,6 +235,34 @@ export default function RegisterScreen() {
 
     setIsSubmitting(true);
     
+    if (!API_ENABLED) {
+      console.log('API desabilitada: simulando cadastro de usuario');
+      Alert.alert(
+        'Sucesso',
+        'API desabilitada. Cadastro simulado com sucesso!',
+        [
+          {
+            text: 'Cadastrar Outro',
+            style: 'default',
+            onPress: () => clearForm()
+          },
+          {
+            text: 'Voltar',
+            style: 'cancel',
+            onPress: () => {
+              if (router.canGoBack()) {
+                router.back();
+              } else {
+                router.replace('/main/Logs');
+              }
+            }
+          }
+        ]
+      );
+      setIsSubmitting(false);
+      return;
+    }
+
     const userData = {
       firstName: firstName.trim(),
       lastName: lastName.trim(),

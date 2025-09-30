@@ -3,6 +3,8 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, Modal, ScrollView, ActivityIndicator, Image, Dimensions } from 'react-native';
 import { cssInterop } from 'nativewind';
 import { Svg, Path } from 'react-native-svg';
+import { API_BASE_URL, API_ENABLED } from '../config/apiConfig';
+import { getMockContainerImages } from '../mocks/mockOperations';
 
 // Configuração do cssInterop
 cssInterop(View, { className: 'style' });
@@ -72,14 +74,20 @@ const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ isVisible, onClose, i
       return;
     }
 
+    if (!API_ENABLED) {
+      const mockImages = getMockContainerImages(item.container.id);
+      setPresignedUrls(mockImages);
+      setError(null);
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
       setError(null);
       
       console.log(`Buscando URLs para container: ${item.container.id}`);
-      
-      const baseUrl = 'http://containerview-prod.us-east-1.elasticbeanstalk.com';
-      const response = await imageFetch(`${baseUrl}/containers/${item.container.id}/imagens`);
+      const response = await imageFetch(`${API_BASE_URL}/containers/${item.container.id}/imagens`);
       
       if (response.ok) {
         const urls: string[] = await response.json();

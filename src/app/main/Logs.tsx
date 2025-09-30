@@ -1,14 +1,15 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, SafeAreaView, Animated, TextInput, FlatList, StyleSheet, ActivityIndicator, Alert, RefreshControl } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Svg, Path } from 'react-native-svg';
 import { cssInterop } from 'nativewind';
-import sombra from "../images/style";
-import ListItem from "../components/Operations";
+import ListItem, { OperationCardData } from "../components/Operations";
 import FilterButton from '../components/Filter';
 import Sidebar from '../components/Sidebar';
 import { router } from 'expo-router';
 import ItemDetailModal from '../components/Details';
 import { useAuth, useAuthenticatedFetch } from '../contexts/_AuthContext';
+import { MOCK_OPERATIONS } from '../mocks/mockOperations';
 import CustomStatusBar from '../components/StatusBar'; // Importando o componente CustomStatusBar
 
 // Interop para permitir o uso de classes Tailwind em componentes React Native
@@ -56,8 +57,6 @@ interface OperationItem {
 }
 
 // Configuração da API
-const API_BASE_URL = 'http://containerview-prod.us-east-1.elasticbeanstalk.com';
-
 export default function Logs() {
   const [searchField, setSearchField] = useState<SearchField>('id');
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(false);
@@ -75,8 +74,10 @@ export default function Logs() {
   const [selectedItem, setSelectedItem] = useState<OperationItem | null>(null);
   
   // Hooks de autenticação
-  const { isAuthenticated, user, token } = useAuth();
+  const { isAuthenticated } = useAuth();
   const authenticatedFetch = useAuthenticatedFetch();
+  const insets = useSafeAreaInsets();
+  const headerPaddingTop = Math.max(insets.top, 12) + 12;
 
   // Função para mapear dados da API real para o formato esperado pelos componentes
   const mapOperationData = (apiResponse: any): OperationItem => {
@@ -90,7 +91,7 @@ export default function Logs() {
       qtde_fotos: apiResponse.container?.images?.length || 0,
     };
 
-    console.log('🔄 Mapeando operação:', {
+    console.log('[Logs] Mapeando operacao:', {
       id: mappedData.id,
       containerId: mappedData.container?.id || 'N/A',
       imageCount: mappedData.qtde_fotos,
@@ -102,119 +103,41 @@ export default function Logs() {
   };
 
   // Função para mapear dados para o componente ListItem
-  const mapDataForListItem = (item: OperationItem) => {
+  const mapDataForListItem = (item: OperationItem): OperationCardData => {
     return {
-      operacao: `OP-${item.id}`, // Gera na hora da exibição
-      container: item.container?.id || '', // Usa o ID real do container
-      qtde_fotos: String(item.qtde_fotos),
-      // Campos adicionais que o ListItem pode precisar
-      id: item.id,
+      operationId: item.id,
+      operationCode: `OP-${item.id}`,
       containerId: item.container?.id || '',
-      containerDescription: item.container?.description || '',
-      containerImages: item.container?.images || [],
+      reservation: item.container?.description || undefined,
+      vessel: undefined,
       createdAt: item.createdAt,
-      userId: item.user?.id || 0,
+      status: undefined,
+      photoCount: item.qtde_fotos,
+      responsible: item.user ? `${item.user.firstName} ${item.user.lastName}` : undefined,
     };
   };
 
   // Função para buscar operações do backend
   const fetchOperations = async (showLoadingIndicator = true) => {
-    if (!isAuthenticated) {
-      console.log('❌ Usuário não autenticado - redirecionando para login');
-      router.replace('/');
-      return;
+    if (showLoadingIndicator) {
+      setLoading(true);
     }
 
     try {
-      if (showLoadingIndicator) {
-        setLoading(true);
-      }
+      const mappedOperations = MOCK_OPERATIONS.map(mapOperationData);
+      setOperations(mappedOperations);
+      setFilteredOperations(mappedOperations);
 
-      console.log('🔄 Buscando operações do backend...');
-      console.log('👤 Usuário logado:', user?.cpf);
-      console.log('🔑 Token disponível:', token ? 'SIM' : 'NÃO');
-
-      const response = await authenticatedFetch(`${API_BASE_URL}/operations`);
-
-      console.log('📥 Resposta recebida:', {
-        status: response.status,
-        statusText: response.statusText,
-        ok: response.ok
+      console.log('[Logs] Operacoes demonstrativas carregadas:', {
+        quantidade: mappedOperations.length,
+        exemplo: mappedOperations.length > 0 ? mappedOperations[0].id : 'NENHUMA OPERAÇÃO',
       });
-
-      if (response.ok) {
-        const data = await response.json();
-        console.log('✅ Operações recebidas:', {
-          count: data.length,
-          sample: data.length > 0 ? {
-            id: data[0].id,
-            hasContainer: !!data[0].container,
-            hasUser: !!data[0].user,
-            containerImagesCount: data[0].container?.images?.length || 0
-          } : 'NENHUMA OPERAÇÃO'
-        });
-
-        // Mapeia os dados da API para o formato interno
-        const mappedOperations = data.map(mapOperationData);
-        setOperations(mappedOperations);
-        setFilteredOperations(mappedOperations);
-
-        console.log('🎯 Operações processadas e salvas no estado');
-      } else {
-        console.error('❌ Erro na resposta da API:', response.status);
-        
-        if (response.status === 401) {
-          Alert.alert(
-            'Sessão Expirada',
-            'Sua sessão expirou. Você será redirecionado para o login.',
-            [{ text: 'OK', onPress: () => router.replace('/') }]
-          );
-          return;
-        }
-
-        const errorMessage = getErrorMessage(response.status);
-        Alert.alert('Erro', `Não foi possível carregar as operações.\n\n${errorMessage}`);
-      }
     } catch (error) {
-      console.error('❌ Erro ao buscar operações:', error);
-      
-      if (error instanceof Error && error.message === 'Sessão expirada') {
-        Alert.alert(
-          'Sessão Expirada',
-          'Sua sessão expirou. Você será redirecionado para o login.',
-          [{ text: 'OK', onPress: () => router.replace('/') }]
-        );
-      } else {
-        Alert.alert(
-          'Erro de Conexão',
-          'Não foi possível conectar ao servidor.\n\nVerifique sua conexão com a internet e tente novamente.',
-          [
-            { text: 'Tentar Novamente', onPress: () => fetchOperations() },
-            { text: 'Cancelar', style: 'cancel' }
-          ]
-        );
-      }
+      console.error('[Logs] Erro ao carregar operacoes demonstrativas:', error);
+      Alert.alert('Erro', 'Não foi possível carregar as operações demonstrativas.');
     } finally {
       setLoading(false);
       setRefreshing(false);
-    }
-  };
-
-  // Função para mapear códigos de erro HTTP
-  const getErrorMessage = (status: number): string => {
-    switch (status) {
-      case 400:
-        return 'Requisição inválida.';
-      case 401:
-        return 'Não autorizado. Faça login novamente.';
-      case 403:
-        return 'Você não tem permissão para ver as operações.';
-      case 404:
-        return 'Operações não encontradas.';
-      case 500:
-        return 'Erro interno do servidor.';
-      default:
-        return 'Erro desconhecido.';
     }
   };
 
@@ -285,19 +208,15 @@ export default function Logs() {
   };
   
   // Função para abrir o modal (usando IDs reais, sem redundância)
-  const handleItemPress = (data: { [key: string]: any; operacao: string; container: string; qtde_fotos: string; }) => {
+  const handleItemPress = (data: OperationCardData) => {
     try {
-      // Extrair ID da operação do formato "OP-123"
-      const operationId = parseInt(data.operacao.replace('OP-', ''));
-      
-      // Encontra o item pelo ID real
-      const fullItem = operations.find(op => op.id === operationId);
+      const fullItem = operations.find(op => op.id === data.operationId);
       if (!fullItem) {
-        Alert.alert('Erro', 'Operação não encontrada');
+        Alert.alert('Erro', 'Operacao nao encontrada');
         return;
       }
 
-      console.log('📋 Abrindo modal (usando IDs reais):', {
+      console.log('[Logs] Abrindo modal (usando IDs reais):', {
         operationId: fullItem.id,
         containerId: fullItem.container?.id || 'N/A',
         hasUser: !!fullItem.user,
@@ -310,12 +229,12 @@ export default function Logs() {
       setIsModalVisible(true);
 
     } catch (error) {
-      console.error('❌ Erro ao abrir modal:', error);
-      Alert.alert('Erro', 'Erro ao abrir detalhes da operação');
+      console.error('[Logs] Erro ao abrir modal:', error);
+      Alert.alert('Erro', 'Erro ao abrir detalhes da operacao');
     }
   };
-  
-  // Função para fechar o modal
+
+  // Funcao para fechar o modal
   const handleCloseModal = () => {
     setIsModalVisible(false);
     setSelectedItem(null);
@@ -348,51 +267,78 @@ export default function Logs() {
       <View className="flex-1 flex-col">
         
         {/* Header */}
-        <View className='w-full h-28 shadow-lg' style={[{ backgroundColor: '#49C5B6' }, sombra.shadow]}>
-          <TouchableOpacity
-            className="absolute p-2 mt-12 ml-3 z-10"
-            onPress={toggleSidebar}
-            activeOpacity={0.7}
-            style={{
-              borderRadius: 8,
-            }}
-          >
-            <Svg width={30} height={30} viewBox="0 0 20 20" fill="none">
-              <Path 
-                d="M2 4.75A.75.75 0 012.75 4h14.5a.75.75 0 010 1.5H2.75A.75.75 0 012 4.75zm0 10.5a.75.75 0 01.75-.75h7.5a.75.75 0 010 1.5h-7.5a.75.75 0 01-.75-.75zM2 10a.75.75 0 01.75-.75h14.5a.75.75 0 010 1.5H2.75A.75.75 0 012 10z"
-                stroke="#000000"
-                strokeWidth="1.1"
-                strokeLinecap="round"
-              />
-            </Svg>
-          </TouchableOpacity>
-
-          {/* Ícone de perfil */}
-          <TouchableOpacity 
-            className="absolute right-4 top-12 p-2"
-            activeOpacity={0.7}
-            onPress={() => {
-              // Aqui você pode adicionar navegação para tela de perfil
-              console.log('Navegando para perfil...');
-            }}
-          >
-            <Svg width={30} height={30} viewBox="0 0 24 24" fill="none">
-              <Path
-                d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"
-                stroke="#2A2E40"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              <Path
-                d="M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z"
-                stroke="#2A2E40"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </Svg>
-          </TouchableOpacity>
+        <View
+          className="w-full px-6 pb-4"
+          style={{
+            backgroundColor: '#FFFFFF',
+            paddingTop: headerPaddingTop,
+            borderBottomColor: 'rgba(42, 46, 64, 0.08)',
+            borderBottomWidth: 1,
+            shadowColor: '#000000',
+            shadowOpacity: 0.05,
+            shadowRadius: 6,
+            shadowOffset: { width: 0, height: 2 },
+            elevation: 3,
+          }}
+        >
+          <View className="flex-row items-center justify-between">
+            <View className="flex-row items-center">
+              <TouchableOpacity
+                className="p-2 mr-3"
+                onPress={toggleSidebar}
+                activeOpacity={0.7}
+                style={{
+                  borderRadius: 8,
+                  backgroundColor: 'rgba(73, 197, 182, 0.12)',
+                }}
+              >
+                <Svg width={24} height={24} viewBox="0 0 20 20" fill="none">
+                  <Path
+                    d="M2 4.75A.75.75 0 0 1 2.75 4h14.5a.75.75 0 1 1 0 1.5H2.75A.75.75 0 0 1 2 4.75zm0 10.5a.75.75 0 0 1 .75-.75h7.5a.75.75 0 1 1 0 1.5h-7.5a.75.75 0 0 1-.75-.75ZM2 10a.75.75 0 0 1 .75-.75h14.5a.75.75 0 1 1 0 1.5H2.75A.75.75 0 0 1 2 10Z"
+                    stroke="#2A2E40"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                  />
+                </Svg>
+              </TouchableOpacity>
+              <View>
+                <Text className="text-lg font-semibold" style={{ color: '#2A2E40' }}>
+                  Operações
+                </Text>
+                <Text className="text-xs" style={{ color: '#6D7380' }}>
+                  Acompanhe as movimentações dos containers
+                </Text>
+              </View>
+            </View>
+            <TouchableOpacity
+              className="p-2"
+              activeOpacity={0.7}
+              onPress={() => {
+                console.log('Navegando para perfil...');
+              }}
+              style={{
+                borderRadius: 9999,
+                backgroundColor: 'rgba(73, 197, 182, 0.12)',
+              }}
+            >
+              <Svg width={26} height={26} viewBox="0 0 24 24" fill="none">
+                <Path
+                  d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"
+                  stroke="#2A2E40"
+                  strokeWidth="1.6"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <Path
+                  d="M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z"
+                  stroke="#2A2E40"
+                  strokeWidth="1.6"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </Svg>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Sidebar Component */}
@@ -406,27 +352,27 @@ export default function Logs() {
         />
 
         {/* Search Bar */}
-        <View className='ml-2 mt-6 bg-white w-full flex-row items-center'>
+        <View className="px-6 mt-6 w-full flex-row items-center">
           <TextInput
             placeholder={`Pesquise por ${searchField === 'id' ? 'ID da operação' : 'container'}`}
             placeholderTextColor="#6D7380"
             value={searchText}
             onChangeText={setSearchText}
-            className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5 flex-1 mr-4 ml-7"
+            className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5 flex-1 mr-3"
             style={{
               borderColor: searchText ? '#49C5B6' : '#E5E7EB',
               borderWidth: searchText ? 2 : 1,
               color: '#2A2E40',
-              shadowColor: "#000",
+              shadowColor: '#000',
               shadowOffset: { width: 0, height: 1 },
-              shadowOpacity: 0.1,
+              shadowOpacity: 0.08,
               shadowRadius: 2,
               elevation: 2,
             }}
             editable={!loading}
             selectionColor="#49C5B6"
           />
-          <View className="mr-4">
+          <View className="ml-1">
             <FilterButton
               onFilterChange={setSearchField}
               currentFilterField={searchField}

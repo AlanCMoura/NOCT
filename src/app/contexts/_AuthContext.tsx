@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
 import { router } from 'expo-router';
 import { Alert } from 'react-native';
+import { API_BASE_URL, API_ENABLED } from '../config/apiConfig';
 
 interface User {
   cpf: string;
@@ -38,8 +39,6 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 // Configurações da API
-const API_BASE_URL = 'http://containerview-prod.us-east-1.elasticbeanstalk.com';
-
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [token, setToken] = useState<string | null>(null); // Token definitivo para sessão
   const [tempToken, setTempToken] = useState<string | null>(null); // Token temporário para 2FA
@@ -49,6 +48,23 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   // Função de login inicial
   const login = async (cpf: string, password: string): Promise<boolean> => {
+    if (!API_ENABLED) {
+      setIsLoading(true);
+      try {
+        setTempToken(null);
+        setRequiresTwoFactor(false);
+        setToken('offline-token');
+        setUser({
+          cpf,
+          requiresTwoFactor: false
+        });
+        router.replace('/main/Logs');
+        return true;
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
     try {
       setIsLoading(true);
       
@@ -138,6 +154,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   // Função de verificação 2FA
   const verifyTwoFactor = async (code: string): Promise<boolean> => {
+    if (!API_ENABLED) {
+      setIsLoading(true);
+      try {
+        setToken('offline-token');
+        setTempToken(null);
+        setRequiresTwoFactor(false);
+        router.replace('/main/Logs');
+        return true;
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
     if (!tempToken) {
       console.error('❌ Token temporário não encontrado');
       Alert.alert('Erro', 'Token temporário não encontrado. Faça login novamente.');
@@ -307,6 +336,10 @@ export const useAuthenticatedFetch = () => {
   const { token, logout } = useAuth();
 
   const authenticatedFetch = async (url: string, options: RequestInit = {}) => {
+    if (!API_ENABLED) {
+      console.warn('API desabilitada: requisicao ignorada', url);
+      throw new Error('API disabled');
+    }
     console.log('🔍 useAuthenticatedFetch - Iniciando requisição');
     console.log('🔗 URL:', url);
     console.log('🔑 Token disponível:', token ? `${token.substring(0, 30)}...` : 'NENHUM TOKEN');

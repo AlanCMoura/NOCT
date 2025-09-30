@@ -9,6 +9,7 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuth, useAuthenticatedFetch } from '../contexts/_AuthContext';
 import CustomStatusBar from '../components/StatusBar'; // Importando o componente CustomStatusBar
+import { API_BASE_URL, API_ENABLED } from '../config/apiConfig';
 
 // Interop para permitir o uso de classes Tailwind em componentes React Native
 cssInterop(View, { className: 'style' });
@@ -24,7 +25,6 @@ cssInterop(FlatList, { className: 'style' });
 
 const { width } = Dimensions.get('window');
 const imageSize = (width - 60) / 3;
-const API_BASE_URL = 'http://containerview-prod.us-east-1.elasticbeanstalk.com';
 
 interface FormData {
   container_id: string;
@@ -225,6 +225,33 @@ export default function Form() {
 
     console.log('✅ Validação passou, iniciando submissão');
     setIsSubmitting(true);
+
+    if (!API_ENABLED) {
+      console.log('API desabilitada: simulando criacao de operacao');
+      Alert.alert(
+        'Sucesso',
+        'API desabilitada. Operacao simulada com sucesso!',
+        [
+          {
+            text: 'Ver Operacoes',
+            onPress: () => {
+              setFormData({ container_id: '', description: '' });
+              setSelectedImages([]);
+              router.push('/main/Logs');
+            }
+          },
+          {
+            text: 'Nova Operacao',
+            onPress: () => {
+              setFormData({ container_id: '', description: '' });
+              setSelectedImages([]);
+            }
+          }
+        ]
+      );
+      setIsSubmitting(false);
+      return;
+    }
 
     try {
       console.log('🔄 Criando operação...');
