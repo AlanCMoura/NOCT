@@ -66,7 +66,7 @@ const ListItem: React.FC<ListItemProps> = ({ data, onPress }) => {
         <View className="flex-row justify-between items-start">
           <View className="flex-1 pr-4">
             <Text className="text-xs font-semibold uppercase tracking-wide" style={{ color: '#94A3B8' }}>
-              OperaÃ§Ã£o
+              Operação
             </Text>
             <Text className="text-xl font-semibold mt-1" style={{ color: '#1F2937' }}>
               {data.operationCode}
@@ -99,7 +99,7 @@ const ListItem: React.FC<ListItemProps> = ({ data, onPress }) => {
                 Reserva
               </Text>
               <Text className="text-sm mt-1" style={{ color: '#1F2937' }}>
-                {data.reservation || 'NÃ£o informado'}
+                {data.reservation || 'Não informado'}
               </Text>
             </View>
           </View>
@@ -113,7 +113,7 @@ const ListItem: React.FC<ListItemProps> = ({ data, onPress }) => {
                 {data.vessel || 'NÃ£o informado'}
               </Text>
             </View>
-            <View className="flex-1 pl-3">
+            <View className="flex-1 pl-3 mt-1">
               <Text className="text-[11px] font-semibold uppercase" style={{ color: '#94A3B8' }}>
                 Data
               </Text>
@@ -127,7 +127,7 @@ const ListItem: React.FC<ListItemProps> = ({ data, onPress }) => {
         <View className="mt-4 flex-row items-center justify-between">
           <View className="flex-1 pr-3">
             <Text className="text-[11px] font-semibold uppercase" style={{ color: '#94A3B8' }}>
-              ResponsÃ¡vel
+              Responsável
             </Text>
             <Text className="text-sm mt-1" style={{ color: '#1F2937' }}>
               {data.responsible || 'Equipe NOCT'}
@@ -141,19 +141,6 @@ const ListItem: React.FC<ListItemProps> = ({ data, onPress }) => {
               {photoChipLabel}
             </Text>
           </View>
-        </View>
-
-        <View className="mt-5 flex-row justify-end">
-          <TouchableOpacity
-            className="flex-row items-center"
-            activeOpacity={0.7}
-            onPress={() => onPress?.(data)}
-          >
-            <Text className="text-sm font-semibold mr-2" style={{ color: '#0F766E' }}>
-              Ver detalhes
-            </Text>
-            <Text style={{ color: '#0F766E', fontSize: 16 }}>â€º</Text>
-          </TouchableOpacity>
         </View>
       </View>
     </TouchableOpacity>

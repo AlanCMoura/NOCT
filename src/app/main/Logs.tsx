@@ -7,8 +7,7 @@ import ListItem, { OperationCardData } from "../components/Operations";
 import FilterButton from '../components/Filter';
 import Sidebar from '../components/Sidebar';
 import { router } from 'expo-router';
-import ItemDetailModal from '../components/Details';
-import { useAuth, useAuthenticatedFetch } from '../contexts/_AuthContext';
+import { useAuth } from '../contexts/_AuthContext';
 import { MOCK_OPERATIONS } from '../mocks/mockOperations';
 import CustomStatusBar from '../components/StatusBar'; // Importando o componente CustomStatusBar
 
@@ -69,13 +68,8 @@ export default function Logs() {
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
   
-  // Estados para o modal
-  const [isModalVisible, setIsModalVisible] = useState<boolean>(false);
-  const [selectedItem, setSelectedItem] = useState<OperationItem | null>(null);
-  
   // Hooks de autenticação
   const { isAuthenticated } = useAuth();
-  const authenticatedFetch = useAuthenticatedFetch();
   const insets = useSafeAreaInsets();
   const headerPaddingTop = Math.max(insets.top, 12) + 12;
 
@@ -206,40 +200,14 @@ export default function Logs() {
   const handleForm = () => {
     router.push('/main/Form');
   };
+
+  const handleOperationPress = (data: OperationCardData) => {
+    router.push({
+      pathname: '/main/OperationDetails',
+      params: { id: data.operationId.toString() },
+    });
+  };
   
-  // Função para abrir o modal (usando IDs reais, sem redundância)
-  const handleItemPress = (data: OperationCardData) => {
-    try {
-      const fullItem = operations.find(op => op.id === data.operationId);
-      if (!fullItem) {
-        Alert.alert('Erro', 'Operacao nao encontrada');
-        return;
-      }
-
-      console.log('[Logs] Abrindo modal (usando IDs reais):', {
-        operationId: fullItem.id,
-        containerId: fullItem.container?.id || 'N/A',
-        hasUser: !!fullItem.user,
-        hasContainer: !!fullItem.container,
-        imageCount: fullItem.qtde_fotos,
-        userName: fullItem.user ? `${fullItem.user.firstName} ${fullItem.user.lastName}` : 'N/A'
-      });
-
-      setSelectedItem(fullItem);
-      setIsModalVisible(true);
-
-    } catch (error) {
-      console.error('[Logs] Erro ao abrir modal:', error);
-      Alert.alert('Erro', 'Erro ao abrir detalhes da operacao');
-    }
-  };
-
-  // Funcao para fechar o modal
-  const handleCloseModal = () => {
-    setIsModalVisible(false);
-    setSelectedItem(null);
-  };
-
   // Se não autenticado, mostra loading
   if (!isAuthenticated) {
     return (
@@ -302,20 +270,15 @@ export default function Logs() {
                 </Svg>
               </TouchableOpacity>
               <View>
-                <Text className="text-lg font-semibold" style={{ color: '#2A2E40' }}>
+                <Text className="text-xl font-semibold" style={{ color: '#2A2E40' }}>
                   Operações
-                </Text>
-                <Text className="text-xs" style={{ color: '#6D7380' }}>
-                  Acompanhe as movimentações dos containers
                 </Text>
               </View>
             </View>
             <TouchableOpacity
               className="p-2"
               activeOpacity={0.7}
-              onPress={() => {
-                console.log('Navegando para perfil...');
-              }}
+              onPress={() => router.push('/main/Profile')}
               style={{
                 borderRadius: 9999,
                 backgroundColor: 'rgba(73, 197, 182, 0.12)',
@@ -393,7 +356,7 @@ export default function Logs() {
               renderItem={({ item }) => (
                 <ListItem 
                   data={mapDataForListItem(item)}
-                  onPress={handleItemPress}
+                  onPress={handleOperationPress}
                 />
               )}
               keyExtractor={(item, index) => `${item.id}-${index}`}
@@ -427,14 +390,6 @@ export default function Logs() {
             />
           )}
         </View>
-        
-        {/* Modal de Detalhes */}
-        <ItemDetailModal
-          isVisible={isModalVisible}
-          onClose={handleCloseModal}
-          item={selectedItem}
-          imageFetch={authenticatedFetch}
-        />
       </View>
       
       {/* Botão Flutuante - Movido para fora da estrutura principal */}

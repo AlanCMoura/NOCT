@@ -9,6 +9,8 @@ export default function MainLayout() {
     >
       <Stack.Screen name="Logs" />
       <Stack.Screen name="Form" />
+      <Stack.Screen name="Profile" />
+      <Stack.Screen name="OperationDetails" />
     </Stack>
   );
 }
