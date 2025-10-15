@@ -11,6 +11,7 @@ export default function MainLayout() {
       <Stack.Screen name="Form" />
       <Stack.Screen name="Profile" />
       <Stack.Screen name="OperationDetails" />
+      <Stack.Screen name="ContainerDetails" />
     </Stack>
   );
 }

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -7,7 +7,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   FlatList,
-  Alert,
+  TextInput,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Svg, Path } from "react-native-svg";
@@ -16,6 +16,10 @@ import { router, useLocalSearchParams } from "expo-router";
 import CustomStatusBar from "../components/StatusBar";
 import SacariaModal from "../components/SacariaModal";
 import { findOperationDetail } from "../mocks/mockOperationDetails";
+import type {
+  OperationCargoDetail,
+  OperationDetail,
+} from "../mocks/mockOperationDetails";
 
 cssInterop(View, { className: "style" });
 cssInterop(Text, { className: "style" });
@@ -50,6 +54,30 @@ const StatusChip = ({ status }: { status: string }) => {
   );
 };
 
+type OperationInfo = Pick<
+  OperationDetail,
+  | "code"
+  | "operation"
+  | "reservation"
+  | "terminal"
+  | "destination"
+  | "vessel"
+  | "exporter"
+  | "deadline"
+>;
+
+const OPERATION_INFO_FIELDS: Array<{ key: keyof OperationInfo; label: string }> =
+  [
+    { key: "code", label: "ID" },
+    { key: "operation", label: "Operacao" },
+    { key: "reservation", label: "Reserva" },
+    { key: "terminal", label: "Local (Terminal)" },
+    { key: "destination", label: "Destino" },
+    { key: "vessel", label: "Navio" },
+    { key: "exporter", label: "Exportador" },
+    { key: "deadline", label: "Deadline Draft" },
+  ];
+
 const OperationDetails = () => {
   const insets = useSafeAreaInsets();
   const headerPaddingTop = Math.max(insets.top, 12) + 12;
@@ -63,12 +91,99 @@ const OperationDetails = () => {
   }, [operationId]);
 
   const totalContainers = detail?.containers.length ?? 0;
-  const imageCount = detail?.cargo.images.length ?? 0;
   const [isSacariaModalOpen, setIsSacariaModalOpen] = useState(false);
+  const [sacariaInfo, setSacariaInfo] = useState<
+    OperationCargoDetail | undefined
+  >(
+    detail
+      ? {
+          ...detail.cargo,
+          images: [...detail.cargo.images],
+        }
+      : undefined,
+  );
+  const imageCount = sacariaInfo
+    ? sacariaInfo.images.filter((uri) => uri.trim().length > 0).length
+    : 0;
+  useEffect(() => {
+    if (detail) {
+      setSacariaInfo({
+        ...detail.cargo,
+        images: [...detail.cargo.images],
+      });
+      return;
+    }
+    setSacariaInfo(undefined);
+  }, [detail]);
+  const [isEditingOperation, setIsEditingOperation] = useState(false);
+  const [operationInfo, setOperationInfo] = useState<OperationInfo | undefined>(
+    () =>
+      detail
+        ? {
+            code: detail.code,
+            operation: detail.operation,
+            reservation: detail.reservation,
+            terminal: detail.terminal,
+            destination: detail.destination,
+            vessel: detail.vessel,
+            exporter: detail.exporter,
+            deadline: detail.deadline,
+          }
+        : undefined,
+  );
+  const [draftOperationInfo, setDraftOperationInfo] = useState<
+    OperationInfo | undefined
+  >(operationInfo);
 
   const handleContainerPress = (containerId: string) => {
-    Alert.alert("Container selecionado", containerId);
+    router.push({
+      pathname: "/main/ContainerDetails",
+      params: { id: encodeURIComponent(containerId) },
+    });
   };
+
+  useEffect(() => {
+    if (detail) {
+      const nextInfo: OperationInfo = {
+        code: detail.code,
+        operation: detail.operation,
+        reservation: detail.reservation,
+        terminal: detail.terminal,
+        destination: detail.destination,
+        vessel: detail.vessel,
+        exporter: detail.exporter,
+        deadline: detail.deadline,
+      };
+      setOperationInfo(nextInfo);
+      setDraftOperationInfo(nextInfo);
+      setIsEditingOperation(false);
+      return;
+    }
+    setOperationInfo(undefined);
+    setDraftOperationInfo(undefined);
+    setIsEditingOperation(false);
+  }, [detail]);
+
+  const handleEditOperationPress = () => {
+    if (!operationInfo) return;
+    setDraftOperationInfo(operationInfo);
+    setIsEditingOperation(true);
+  };
+
+  const handleCancelEditOperation = () => {
+    setDraftOperationInfo(operationInfo);
+    setIsEditingOperation(false);
+  };
+
+  const handleSaveOperationInfo = () => {
+    if (!draftOperationInfo) return;
+    setOperationInfo(draftOperationInfo);
+    setIsEditingOperation(false);
+  };
+
+  const displayedOperationInfo = isEditingOperation
+    ? draftOperationInfo
+    : operationInfo;
 
   return (
     <SafeAreaView className="flex-1" style={{ backgroundColor: "#F6F8FB" }}>
@@ -119,46 +234,98 @@ const OperationDetails = () => {
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.card}>
-            <Text className="text-lg font-semibold" style={styles.sectionTitle}>
-              Informacoes da Operacao
-            </Text>
+            <View style={styles.sectionHeader}>
+              <Text
+                className="text-lg font-semibold"
+                style={styles.sectionTitle}
+              >
+                Informacoes da Operacao
+              </Text>
+              {!isEditingOperation && displayedOperationInfo && (
+                <TouchableOpacity
+                  style={styles.editButton}
+                  activeOpacity={0.8}
+                  onPress={handleEditOperationPress}
+                >
+                  <Text style={styles.editButtonText}>Editar</Text>
+                </TouchableOpacity>
+              )}
+            </View>
             {detail ? (
-              <View style={styles.infoGrid}>
-                <View style={styles.infoColumn}>
-                  <Text style={styles.infoLabel}>ID</Text>
-                  <Text style={styles.infoValue}>{detail.code}</Text>
-                </View>
-                <View style={styles.infoColumn}>
-                  <Text style={styles.infoLabel}>Operacao</Text>
-                  <Text style={styles.infoValue}>{detail.operation}</Text>
-                </View>
-                <View style={styles.infoColumn}>
-                  <Text style={styles.infoLabel}>Reserva</Text>
-                  <Text style={styles.infoValue}>{detail.reservation}</Text>
-                </View>
-                <View style={styles.infoColumn}>
-                  <Text style={styles.infoLabel}>Local (Terminal)</Text>
-                  <Text style={styles.infoValue}>{detail.terminal}</Text>
-                </View>
-                <View style={styles.infoColumn}>
-                  <Text style={styles.infoLabel}>Destino</Text>
-                  <Text style={styles.infoValue}>{detail.destination}</Text>
-                </View>
-                <View style={styles.infoColumn}>
-                  <Text style={styles.infoLabel}>Navio</Text>
-                  <Text style={styles.infoValue}>{detail.vessel}</Text>
-                </View>
-                <View style={styles.infoColumn}>
-                  <Text style={styles.infoLabel}>Exportador</Text>
-                  <Text style={styles.infoValue}>{detail.exporter}</Text>
-                </View>
-                <View style={styles.infoColumn}>
-                  <Text style={styles.infoLabel}>Deadline Draft</Text>
-                  <Text style={styles.infoValue}>
-                    {formatDate(detail.deadline)}
+              displayedOperationInfo ? (
+                <>
+                  <View style={styles.infoGrid}>
+                    {OPERATION_INFO_FIELDS.map(({ key, label }) => (
+                      <View key={key} style={styles.infoColumn}>
+                        <Text style={styles.infoLabel}>{label}</Text>
+                        {isEditingOperation ? (
+                          <TextInput
+                            value={draftOperationInfo?.[key] ?? ""}
+                            onChangeText={(text) =>
+                              setDraftOperationInfo((prev) =>
+                                prev
+                                  ? ({ ...prev, [key]: text } as OperationInfo)
+                                  : prev,
+                              )
+                            }
+                            style={styles.textInput}
+                            placeholder={label}
+                            placeholderTextColor="#94A3B8"
+                            autoCorrect={false}
+                          />
+                        ) : (
+                          <Text style={styles.infoValue}>
+                            {key === "deadline"
+                              ? formatDate(displayedOperationInfo[key])
+                              : displayedOperationInfo[key]}
+                          </Text>
+                        )}
+                      </View>
+                    ))}
+                  </View>
+                  {isEditingOperation && (
+                    <View style={styles.editActions}>
+                      <TouchableOpacity
+                        style={[styles.actionButton, styles.cancelButton]}
+                        activeOpacity={0.8}
+                        onPress={handleCancelEditOperation}
+                      >
+                        <Text
+                          style={[
+                            styles.actionButtonText,
+                            styles.cancelButtonText,
+                          ]}
+                        >
+                          Cancelar
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.actionButton, styles.saveButton]}
+                        activeOpacity={0.8}
+                        onPress={handleSaveOperationInfo}
+                      >
+                        <Text
+                          style={[
+                            styles.actionButtonText,
+                            styles.saveButtonText,
+                          ]}
+                        >
+                          Salvar
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </>
+              ) : (
+                <View style={styles.emptyState}>
+                  <Text style={styles.emptyStateTitle}>
+                    Informacoes nao disponiveis
+                  </Text>
+                  <Text style={styles.emptyStateSubtitle}>
+                    Nao foi possivel carregar os dados desta operacao.
                   </Text>
                 </View>
-              </View>
+              )
             ) : (
               <View style={styles.emptyState}>
                 <Text style={styles.emptyStateTitle}>
@@ -172,26 +339,41 @@ const OperationDetails = () => {
           </View>
 
           <View style={styles.card}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Sacaria</Text>
+            </View>
+            {sacariaInfo ? (
+              <TouchableOpacity
+                style={styles.sacariaSummaryCard}
+                activeOpacity={0.85}
+                onPress={() => setIsSacariaModalOpen(true)}
+              >
+                <View style={styles.sacariaSummaryLeft}>
+                  <Text style={styles.sacariaTitle}>{sacariaInfo.title}</Text>
+                  <Text style={styles.imageCountText}>
+                    {imageCount} {imageCount === 1 ? "imagem" : "imagens"}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            ) : (
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyStateTitle}>
+                  Sacaria nao encontrada
+                </Text>
+                <Text style={styles.emptyStateSubtitle}>
+                  Nao foi possivel carregar as imagens desta operacao.
+                </Text>
+              </View>
+            )}
+          </View>
+
+          <View style={styles.card}>
             <Text className="text-lg font-semibold" style={styles.sectionTitle}>
               Containers da Operacao
             </Text>
 
             {detail ? (
               <View>
-                <TouchableOpacity
-                  style={styles.cargoCard}
-                  activeOpacity={0.85}
-                  onPress={() => setIsSacariaModalOpen(true)}
-                >
-                  <View style={styles.cargoAccent} />
-                  <View style={styles.cargoHeader}>
-                    <Text style={styles.cargoTitle}>{detail.cargo.title}</Text>
-                    <Text style={styles.imageCountText}>
-                      {imageCount} {imageCount === 1 ? "imagem" : "imagens"}
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-
                 <Text style={styles.totalLabel}>
                   Total de containers:{" "}
                   <Text style={styles.totalValue}>{totalContainers}</Text>
@@ -234,7 +416,13 @@ const OperationDetails = () => {
       <SacariaModal
         visible={isSacariaModalOpen}
         onClose={() => setIsSacariaModalOpen(false)}
-        cargo={detail?.cargo}
+        cargo={sacariaInfo}
+        onSave={(updated) => {
+          setSacariaInfo({
+            ...updated,
+            images: [...updated.images],
+          });
+        }}
       />
     </SafeAreaView>
   );
@@ -279,8 +467,24 @@ const styles = StyleSheet.create({
     elevation: 2,
     gap: 16,
   },
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
   sectionTitle: {
     color: "#2A2E40",
+  },
+  editButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 9999,
+    backgroundColor: "#49C5B6",
+  },
+  editButtonText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#FFFFFF",
   },
   infoGrid: {
     flexDirection: "row",
@@ -288,7 +492,7 @@ const styles = StyleSheet.create({
     columnGap: 12,
   },
   infoColumn: {
-    width: "47%",
+    width: "48%",
     marginBottom: 16,
   },
   infoLabel: {
@@ -303,6 +507,65 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#2A2E40",
   },
+  textInput: {
+    marginTop: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 0,
+    height: 48,
+    borderWidth: 1,
+    borderColor: "rgba(42, 46, 64, 0.12)",
+    borderRadius: 12,
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#2A2E40",
+    backgroundColor: "#F8FAFC",
+  },
+  editActions: {
+    marginTop: 12,
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 12,
+  },
+  actionButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    borderRadius: 9999,
+  },
+  actionButtonText: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  cancelButton: {
+    backgroundColor: "rgba(42, 46, 64, 0.08)",
+  },
+  cancelButtonText: {
+    color: "#2A2E40",
+  },
+  saveButton: {
+    backgroundColor: "#49C5B6",
+  },
+  saveButtonText: {
+    color: "#FFFFFF",
+  },
+  sacariaSummaryCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#F8FAFC",
+    borderRadius: 16,
+    paddingVertical: 18,
+    paddingHorizontal: 20,
+    borderWidth: 1,
+    borderColor: "rgba(42, 46, 64, 0.08)",
+  },
+  sacariaSummaryLeft: {
+    gap: 4,
+  },
+  sacariaTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#2A2E40",
+  },
   emptyState: {
     alignItems: "flex-start",
     gap: 6,
@@ -313,45 +576,6 @@ const styles = StyleSheet.create({
     color: "#2A2E40",
   },
   emptyStateSubtitle: {
-    fontSize: 14,
-    color: "#6D7380",
-  },
-  cargoCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 18,
-    paddingVertical: 18,
-    paddingHorizontal: 20,
-    borderWidth: 0,
-    shadowColor: "#0F172A",
-    shadowOpacity: 0.03,
-    shadowRadius: 5,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 1,
-    gap: 10,
-    overflow: "hidden",
-  },
-  cargoAccent: {
-    position: "absolute",
-    left: 0,
-    top: 14,
-    bottom: 14,
-    width: 3,
-    borderRadius: 9999,
-    backgroundColor: "#49C5B6",
-    opacity: 0.6,
-  },
-  cargoHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  cargoTitle: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#2A2E40",
-    letterSpacing: 0.3,
-  },
-  cargoSubtitle: {
     fontSize: 14,
     color: "#6D7380",
   },
