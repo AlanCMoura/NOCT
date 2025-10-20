@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, SafeAreaView, Animated, TextInput, FlatList, StyleSheet, ActivityIndicator, Alert, RefreshControl } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, SafeAreaView, Animated, TextInput, FlatList, ActivityIndicator, Alert, RefreshControl } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Svg, Path } from 'react-native-svg';
 import { cssInterop } from 'nativewind';
@@ -197,10 +197,6 @@ export default function Logs() {
     setSidebarOpen(newSidebarState);
   };
 
-  const handleForm = () => {
-    router.push('/main/Form');
-  };
-
   const handleOperationPress = (data: OperationCardData) => {
     router.push({
       pathname: '/main/OperationDetails',
@@ -361,7 +357,7 @@ export default function Logs() {
               )}
               keyExtractor={(item, index) => `${item.id}-${index}`}
               className="flex-1 w-full"
-              contentContainerStyle={{ paddingBottom: 100, paddingHorizontal: 16 }}
+              contentContainerStyle={{ paddingBottom: 64, paddingHorizontal: 16 }}
               showsVerticalScrollIndicator={false}
               ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
               ListEmptyComponent={() => (
@@ -374,7 +370,7 @@ export default function Logs() {
                   </Text>
                   {!searchText && (
                     <Text className="text-sm text-center mt-2" style={{ color: '#6D7380', opacity: 0.7 }}>
-                      Toque no botão + para criar sua primeira operação
+                      Ajuste os filtros ou aguarde novos registros.
                     </Text>
                   )}
                 </View>
@@ -391,59 +387,7 @@ export default function Logs() {
           )}
         </View>
       </View>
-      
-      {/* Botão Flutuante - Movido para fora da estrutura principal */}
-      <View style={styles.floatingButtonContainer}>
-        <TouchableOpacity 
-          style={[
-            styles.floatingButton, 
-          ]} 
-          onPress={handleForm}
-          disabled={loading}
-          activeOpacity={0.8}
-        >
-            <Text style={styles.floatingButtonText}>+</Text>
-        </TouchableOpacity>
-      </View>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  floatingButtonContainer: {
-    position: 'absolute',
-    bottom: 30,
-    right: 20,
-    zIndex: 9999, // Z-index muito alto para garantir que fique por cima
-  },
-  floatingButton: {
-    backgroundColor: '#49C5B6', // Verde-água da paleta
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    justifyContent: 'center',
-    alignItems: 'center',
-    elevation: 12, // Elevation maior no Android
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    // Borda sutil para melhor definição
-    borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
-    // Efeito de pressão mais suave
-    transform: [{ scale: 1 }],
-  },
-  floatingButtonDisabled: {
-    backgroundColor: '#6D7380', // Cinza quando desabilitado
-    elevation: 6,
-    shadowOpacity: 0.1,
-  },
-  floatingButtonText: {
-    color: 'white',
-    fontSize: 22, // Tamanho um pouco maior
-    fontWeight: 'bold',
-    textAlign: 'center',
-    lineHeight: 28, // Para centralização perfeita
-  },
-});

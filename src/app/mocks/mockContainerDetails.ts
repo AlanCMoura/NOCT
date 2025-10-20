@@ -28,6 +28,17 @@ const createImages = (count: number, query: string) =>
     `https://source.unsplash.com/collection/483251/${900 + index}x${600 + index}?${query}`,
   );
 
+const SECTION_TEMPLATES: Array<Pick<ContainerPhotoSection, "id" | "title">> = [
+  { id: "empty", title: "Vazio/Forrado" },
+  { id: "partial", title: "Parcial" },
+  { id: "full", title: "Cheio/Aberto" },
+  { id: "half-door", title: "Meia Porta" },
+  { id: "seals", title: "Lacres" },
+];
+
+export const createEmptyPhotoSections = (): ContainerPhotoSection[] =>
+  SECTION_TEMPLATES.map((section) => ({ ...section, images: [] }));
+
 export const MOCK_CONTAINER_DETAILS: ContainerDetail[] = [
   {
     id: 'CNTR 100001-1',
@@ -75,5 +86,60 @@ export const MOCK_CONTAINER_DETAILS: ContainerDetail[] = [
   },
 ];
 
+let containerSequence = MOCK_CONTAINER_DETAILS.reduce((max, detail) => {
+  const match = detail.id.match(/\d+/g);
+  if (!match?.length) return max;
+  const numeric = parseInt(match[0], 10);
+  if (Number.isNaN(numeric)) return max;
+  return Math.max(max, numeric);
+}, 100000);
+
+const generateContainerId = () => {
+  containerSequence += 1;
+  return `CNTR ${containerSequence}-1`;
+};
+
 export const findContainerDetail = (id: string) =>
   MOCK_CONTAINER_DETAILS.find((detail) => detail.id === id);
+
+export const createContainerDetail = (
+  input: ContainerDetail,
+): ContainerDetail => {
+  const id = input.id?.trim().length ? input.id.trim() : generateContainerId();
+  const code = input.code?.trim().length ? input.code.trim() : id;
+  const normalized: ContainerDetail = {
+    ...input,
+    id,
+    code,
+    operationCode: input.operationCode?.trim() ?? "",
+    operationName: input.operationName?.trim() ?? "",
+    status: input.status ?? "Nao iniciado",
+    sacariaQuantity: input.sacariaQuantity ?? "",
+    tare: input.tare ?? "",
+    netWeight: input.netWeight ?? "",
+    grossWeight: input.grossWeight ?? "",
+    sealAgency: input.sealAgency ?? "",
+    otherSeals: input.otherSeals ?? "",
+    pickupDate: input.pickupDate ?? "",
+    stuffingDate: input.stuffingDate ?? "",
+    photoSections:
+      input.photoSections?.length
+        ? input.photoSections.map((section) => ({
+            id: section.id,
+            title: section.title,
+            images: [...section.images],
+          }))
+        : createEmptyPhotoSections(),
+  };
+
+  const existingIndex = MOCK_CONTAINER_DETAILS.findIndex(
+    (detail) => detail.id === normalized.id,
+  );
+  if (existingIndex >= 0) {
+    MOCK_CONTAINER_DETAILS[existingIndex] = normalized;
+  } else {
+    MOCK_CONTAINER_DETAILS.push(normalized);
+  }
+
+  return normalized;
+};

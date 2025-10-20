@@ -235,10 +235,7 @@ const OperationDetails = () => {
         >
           <View style={styles.card}>
             <View style={styles.sectionHeader}>
-              <Text
-                className="text-lg font-semibold"
-                style={styles.sectionTitle}
-              >
+              <Text style={styles.sectionTitle}>
                 Informacoes da Operacao
               </Text>
               {!isEditingOperation && displayedOperationInfo && (
@@ -368,9 +365,23 @@ const OperationDetails = () => {
           </View>
 
           <View style={styles.card}>
-            <Text className="text-lg font-semibold" style={styles.sectionTitle}>
-              Containers da Operacao
-            </Text>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Containers da Operacao</Text>
+              {detail && (
+                <TouchableOpacity
+                  style={styles.editButton}
+                  activeOpacity={0.8}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/main/ContainerDetails",
+                      params: { id: encodeURIComponent("novo") },
+                    })
+                  }
+                >
+                  <Text style={styles.editButtonText}>Novo</Text>
+                </TouchableOpacity>
+              )}
+            </View>
 
             {detail ? (
               <View>
@@ -473,6 +484,8 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   sectionTitle: {
+    fontSize: 16,
+    fontWeight: "700",
     color: "#2A2E40",
   },
   editButton: {
@@ -496,14 +509,14 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   infoLabel: {
-    fontSize: 12,
+    fontSize: 11,
     color: "#6D7380",
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
   infoValue: {
     marginTop: 6,
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "600",
     color: "#2A2E40",
   },
@@ -515,8 +528,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(42, 46, 64, 0.12)",
     borderRadius: 12,
-    fontSize: 16,
-    fontWeight: "600",
+    fontSize: 14,
     color: "#2A2E40",
     backgroundColor: "#F8FAFC",
   },

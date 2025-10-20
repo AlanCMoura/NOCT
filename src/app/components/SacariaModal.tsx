@@ -22,6 +22,8 @@ cssInterop(Text, { className: 'style' });
 cssInterop(TouchableOpacity, { className: 'style' });
 cssInterop(ScrollView, { className: 'style' });
 
+const CAROUSEL_ITEM_SPACING = 16;
+
 interface SacariaModalProps {
   visible: boolean;
   onClose: () => void;
@@ -79,7 +81,11 @@ const SacariaModal: React.FC<SacariaModalProps> = ({
   const displayImages =
     displayCargo?.images?.filter((uri) => uri.trim().length > 0) ?? [];
   const imageCount = displayImages.length;
-  const slideWidth = Dimensions.get('window').width - 80;
+  const carouselWidth = Dimensions.get('window').width;
+  const slideWidth = Math.max(
+    (carouselWidth - CAROUSEL_ITEM_SPACING) / 1.5,
+    220,
+  );
   const carouselData = displayImages;
 
   useEffect(() => {
@@ -381,13 +387,17 @@ const SacariaModal: React.FC<SacariaModalProps> = ({
                 horizontal
                 keyExtractor={(item, index) => `${item}-${index}`}
                 showsHorizontalScrollIndicator={false}
-                pagingEnabled
                 snapToAlignment="start"
                 decelerationRate="fast"
-                snapToInterval={slideWidth}
+                snapToInterval={slideWidth + CAROUSEL_ITEM_SPACING}
                 disableIntervalMomentum
-                contentContainerStyle={styles.carouselContent}
-                ItemSeparatorComponent={() => <View style={{ width: 16 }} />}
+                contentContainerStyle={[
+                  styles.carouselContent,
+                  { paddingHorizontal: CAROUSEL_ITEM_SPACING },
+                ]}
+                ItemSeparatorComponent={() => (
+                  <View style={{ width: CAROUSEL_ITEM_SPACING }} />
+                )}
                 renderItem={({ item }) => (
                   <View style={[styles.carouselSlide, { width: slideWidth }]}>
                     <Image

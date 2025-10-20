@@ -3,7 +3,6 @@ import React from 'react';
 import { View, Text, TouchableOpacity, ScrollView, Animated, TouchableWithoutFeedback, Alert } from 'react-native';
 import { Svg, Path } from 'react-native-svg';
 import { cssInterop } from 'nativewind';
-import { router } from 'expo-router';
 import { useAuth } from '../contexts/_AuthContext'; // Ajuste o caminho conforme necessário
 
 // Interop for Tailwind classes
@@ -21,19 +20,6 @@ const OperationsIcon = ({ width = 25, height = 20, fill = "#000000" }) => (
   </Svg>
 );
 
-// Ícone para Inspetores (Users com distintivo)
-const InspectorsIcon = ({ width = 25, height = 20, fill = "#000000" }) => (
-  <Svg width={width} height={height} viewBox="0 0 640 512" fill={fill}>
-    <Path d="M144 0a80 80 0 1 1 0 160A80 80 0 1 1 144 0zM512 0a80 80 0 1 1 0 160A80 80 0 1 1 512 0zM0 298.7C0 239.8 47.8 192 106.7 192h42.7c15.9 0 31 3.5 44.6 9.7c-1.3 7.2-1.9 14.7-1.9 22.3c0 38.2 16.8 72.5 43.3 96c-.2 0-.4 0-.7 0H21.3C9.6 320 0 310.4 0 298.7zM405.3 320c-.2 0-.4 0-.7 0c26.6-23.5 43.3-57.8 43.3-96c0-7.6-.7-15-1.9-22.3c13.6-6.3 28.7-9.7 44.6-9.7h42.7C592.2 192 640 239.8 640 298.7c0 11.8-9.6 21.3-21.3 21.3H405.3zM224 224a96 96 0 1 1 192 0 96 96 0 1 1 -192 0zM128 485.3C128 411.7 187.7 352 261.3 352H378.7C452.3 352 512 411.7 512 485.3c0 14.7-11.9 26.7-26.7 26.7H154.7c-14.7 0-26.7-11.9-26.7-26.7z"/>
-  </Svg>
-);
-
-// Ícone para Cadastro (User Plus)
-const SignUpIcon = ({ width = 25, height = 20, fill = "#000000" }) => (
-  <Svg width={width} height={height} viewBox="0 0 640 512" fill={fill}>
-    <Path d="M352 128c0 70.7-57.3 128-128 128s-128-57.3-128-128S153.3 0 224 0s128 57.3 128 128zM0 482.3C0 383.8 79.8 304 178.3 304h91.4C368.2 304 448 383.8 448 482.3c0 16.4-13.3 29.7-29.7 29.7H29.7C13.3 512 0 498.7 0 482.3zM504 312V248c0-13.3 10.7-24 24-24s24 10.7 24 24v64h64c13.3 0 24 10.7 24 24s-10.7 24-24 24H552v64c0 13.3-10.7 24-24 24s-24-10.7-24-24V360H440c-13.3 0-24-10.7-24-24s10.7-24 24-24h64z"/>
-  </Svg>
-);
 
 // Ícone para Logout (Sign Out)
 const LogoutIcon = ({ width = 25, height = 20, fill = "#000000" }) => (
@@ -43,7 +29,7 @@ const LogoutIcon = ({ width = 25, height = 20, fill = "#000000" }) => (
 );
 
 // Define sidebar menu options type
-export type SidebarMenuOption = 'operations' | 'inspectors' | 'signup';
+export type SidebarMenuOption = 'operations';
 
 // Define the prop types for the Sidebar component
 interface SidebarProps {
@@ -65,7 +51,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   activeOption,
   onOptionSelect
 }) => {
-  const { logout, user } = useAuth();
+  const { logout } = useAuth();
 
   const closeSidebar = () => {
     if (sidebarOpen) {
@@ -88,10 +74,6 @@ const Sidebar: React.FC<SidebarProps> = ({
   };
 
   const handleOptionPress = (option: SidebarMenuOption) => {
-    if (option === 'signup') {
-      router.replace('/Register');
-    }
-    
     if (onOptionSelect) {
       onOptionSelect(option);
     }
@@ -192,53 +174,6 @@ const Sidebar: React.FC<SidebarProps> = ({
                 </Text>
               </TouchableOpacity> 
 
-              {/* Inspetores */}
-              <TouchableOpacity 
-                className={`flex-row items-center p-3 rounded-lg mb-2`}
-                style={{
-                  backgroundColor: activeOption === 'inspectors' ? '#F0F9F7' : '#FFFFFF',
-                  borderWidth: activeOption === 'inspectors' ? 1 : 0,
-                  borderColor: activeOption === 'inspectors' ? '#49C5B6' : 'transparent',
-                }}
-                onPress={() => handleOptionPress('inspectors')}
-                activeOpacity={0.7}
-              >
-                <InspectorsIcon 
-                  fill="#2A2E40"
-                />
-                <Text 
-                  className="ml-3 text-base font-medium flex-1"
-                  style={{ 
-                    color: activeOption === 'inspectors' ? '#49C5B6' : '#2A2E40' 
-                  }}
-                >
-                  Inspetores
-                </Text>
-              </TouchableOpacity>
-
-              {/* Cadastrar Usuário */}
-              <TouchableOpacity 
-                className={`flex-row items-center p-3 rounded-lg mb-2`}
-                style={{
-                  backgroundColor: activeOption === 'signup' ? '#F0F9F7' : '#FFFFFF',
-                  borderWidth: activeOption === 'signup' ? 1 : 0,
-                  borderColor: activeOption === 'signup' ? '#49C5B6' : 'transparent',
-                }}
-                onPress={() => handleOptionPress('signup')}
-                activeOpacity={0.7}
-              >
-                <SignUpIcon 
-                  fill="#2A2E40"
-                />
-                <Text 
-                  className="ml-3 text-base font-medium flex-1"
-                  style={{ 
-                    color: activeOption === 'signup' ? '#49C5B6' : '#2A2E40' 
-                  }}
-                >
-                  Cadastrar Usuário
-                </Text>
-              </TouchableOpacity>
             </View>
 
             {/* Seção Inferior - Logout */}
