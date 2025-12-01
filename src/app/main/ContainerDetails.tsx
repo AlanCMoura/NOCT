@@ -14,6 +14,7 @@ import {
   TextInput,
   StyleProp,
   ViewStyle,
+  ActivityIndicator,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Svg, Path } from "react-native-svg";
@@ -21,7 +22,6 @@ import { cssInterop } from "nativewind";
 import { router, useLocalSearchParams } from "expo-router";
 import CustomStatusBar from "../components/StatusBar";
 import {
-  findContainerDetail,
   type ContainerDetail,
   type ContainerStatus,
   type ContainerPhotoSection,
@@ -29,6 +29,8 @@ import {
   createEmptyPhotoSections,
 } from "../mocks/mockContainerDetails";
 import * as ImagePicker from "expo-image-picker";
+import { useAuthenticatedFetch } from "../contexts/_AuthContext";
+import { API_BASE_URL } from "../config/apiConfig";
 
 cssInterop(View, { className: "style" });
 cssInterop(Text, { className: "style" });
@@ -70,12 +72,34 @@ const STATUS_OPTIONS: ContainerStatus[] = [
   "Concluido",
 ];
 
+const mapStatusFromApi = (value?: string): ContainerStatus => {
+  const upper = (value || "").toUpperCase();
+  if (upper.includes("COMPLE")) return "Concluido";
+  if (upper.includes("PEND") || upper.includes("OPEN") || upper.includes("ANDAMENTO")) return "Em andamento";
+  return "Nao iniciado";
+};
+
+const mapStatusToApi = (status: ContainerStatus): string => {
+  if (status === "Concluido") return "COMPLETED";
+  if (status === "Em andamento") return "OPEN";
+  return "PENDING";
+};
+
+const CATEGORY_SECTIONS: Array<{ id: string; title: string; category: string }> = [
+  { id: "empty", title: "Vazio/Forrado", category: "VAZIO_FORRADO" },
+  { id: "partial", title: "Parcial", category: "FIADA" },
+  { id: "full", title: "Cheio/Aberto", category: "CHEIO_ABERTO" },
+  { id: "half-door", title: "Meia Porta", category: "MEIA_PORTA" },
+  { id: "seals", title: "Lacres", category: "LACRES_PRINCIPAIS" },
+];
+
 const buildEmptyContainer = (
   overrides?: Partial<ContainerDetail>,
 ): ContainerDetail => {
   const base: ContainerDetail = {
     id: "",
     code: "",
+    description: "",
     operationCode: "",
     operationName: "",
     status: "Nao iniciado",
@@ -123,39 +147,99 @@ const ContainerDetails = () => {
     normalizedId === "novo" ||
     normalizedId === "new" ||
     normalizedId === "create";
+  const authFetch = useAuthenticatedFetch();
 
-  const detail = useMemo(() => {
-    if (!containerId) return undefined;
-    return findContainerDetail(containerId);
-  }, [containerId]);
-
-  const [currentDetail, setCurrentDetail] = useState<ContainerDetail | undefined>(detail);
+  const [currentDetail, setCurrentDetail] = useState<ContainerDetail | undefined>(undefined);
   const [isEditing, setIsEditing] = useState(false);
   const [draftDetail, setDraftDetail] = useState<ContainerDetail | undefined>();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!detail) return;
-    setCurrentDetail(detail);
-    if (!isCreateMode) {
+  const mapContainerDetail = (api: any, idFallback: string): ContainerDetail => {
+    return {
+      id: api?.containerId || api?.id || idFallback || "",
+      code: api?.containerId || api?.id || idFallback || "",
+      description: api?.description ?? api?.containerDescription ?? "",
+      operationCode: String(api?.operationId ?? api?.operation?.id ?? operationCodeParam ?? ""),
+      operationName: operationNameParam ?? "",
+      status: mapStatusFromApi(api?.status),
+      sacariaQuantity: api?.sacksCount != null ? String(api.sacksCount) : "",
+      tare: api?.tareTons != null ? String(api.tareTons) : "",
+      netWeight: api?.liquidWeight != null ? String(api.liquidWeight) : "",
+      grossWeight: api?.grossWeight != null ? String(api.grossWeight) : "",
+      sealAgency: api?.agencySeal ?? "",
+      otherSeals: Array.isArray(api?.otherSeals) ? api.otherSeals.join(", ") : api?.otherSeals ?? "",
+      pickupDate: "",
+      stuffingDate: "",
+      photoSections: createEmptyPhotoSections(),
+    };
+  };
+
+  const fetchImagesByCategory = async (id: string, category: string) => {
+    try {
+      const response = await authFetch(
+        `${API_BASE_URL}/containers/${id}/images/${category}?expirationMinutes=120`,
+      );
+      if (!response.ok) return [];
+      const data = await response.json();
+      return (data || [])
+        .map((item: any) => item?.imageUrl || item?.signedUrl || item?.url)
+        .filter((u: any) => typeof u === "string" && u.length > 0);
+    } catch {
+      return [];
+    }
+  };
+
+  const fetchContainerDetail = async (id: string) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await authFetch(`${API_BASE_URL}/containers/${id}`);
+      if (!response.ok) {
+        setError(`Erro ${response.status} ao carregar container`);
+        setCurrentDetail(undefined);
+        return;
+      }
+      const apiData = await response.json();
+      const mapped = mapContainerDetail(apiData, id);
+
+      const photos = await Promise.all(
+        CATEGORY_SECTIONS.map(async (section) => {
+          const images = await fetchImagesByCategory(id, section.category);
+          return { ...section, images };
+        }),
+      );
+
+      const sections: ContainerPhotoSection[] = CATEGORY_SECTIONS.map((section) => {
+        const found = photos.find((p) => p.id === section.id);
+        return {
+          id: section.id,
+          title: section.title,
+          images: found?.images ?? [],
+        };
+      });
+
+      setCurrentDetail({ ...mapped, photoSections: sections });
       setIsEditing(false);
       setDraftDetail(undefined);
+    } catch (err) {
+      setError("Não foi possível carregar o container.");
+      setCurrentDetail(undefined);
+    } finally {
+      setLoading(false);
     }
-  }, [detail, isCreateMode]);
+  };
 
   useEffect(() => {
-    if (!isCreateMode || currentDetail) return;
-    const overrides: Partial<ContainerDetail> = {
-      operationCode: operationCodeParam ?? "",
-      operationName: operationNameParam ?? "",
-    };
-    setCurrentDetail(undefined);
-    setDraftDetail((prev) => prev ?? buildEmptyContainer(overrides));
-    setIsEditing(true);
-  }, [isCreateMode, operationCodeParam, operationNameParam, currentDetail]);
+    if (!containerId || isCreateMode) return;
+    fetchContainerDetail(containerId);
+  }, [containerId, isCreateMode, operationCodeParam, operationNameParam]);
 
-  const baseDetail = currentDetail ?? detail;
+  const baseDetail = currentDetail;
   const displayDetail = isEditing && draftDetail ? draftDetail : baseDetail;
   const isDetailInProgress = displayDetail?.status === "Em andamento";
+  const safeStatus = displayDetail?.status ?? "Nao iniciado";
+  const statusInfo = STATUS_MAP[safeStatus] ?? STATUS_MAP["Nao iniciado"];
 
   const handleToggleProgress = () => {
     if (!displayDetail) return;
@@ -317,8 +401,8 @@ const ContainerDetails = () => {
     };
   };
 
-  const handleEditSave = () => {
-    if (!draftDetail) return;
+  const handleEditSave = async () => {
+    if (!draftDetail || !containerId) return;
     const sanitized = sanitizeDetail(draftDetail);
     const normalized: ContainerDetail = {
       ...sanitized,
@@ -329,19 +413,92 @@ const ContainerDetails = () => {
         ? sanitized.photoSections
         : createEmptyPhotoSections(),
     };
-    const savedDetail = createContainerDetail(normalized);
-    setCurrentDetail(savedDetail);
-    setDraftDetail(undefined);
-    setIsEditing(false);
-    if (isCreateMode || !baseDetail) {
-      router.replace({
-        pathname: "/main/ContainerDetails",
-        params: { id: encodeURIComponent(savedDetail.id) },
+
+    const payload = {
+      description: normalized.description ?? "",
+      sacksCount: Number(normalized.sacariaQuantity) || 0,
+      tareTons: Number(normalized.tare) || 0,
+      liquidWeight: Number(normalized.netWeight) || 0,
+      grossWeight: Number(normalized.grossWeight) || 0,
+      agencySeal: normalized.sealAgency ?? "",
+      otherSeals:
+        normalized.otherSeals
+          ?.split(",")
+          .map((s) => s.trim())
+          .filter((s) => s.length > 0) ?? [],
+      status: mapStatusToApi(normalized.status ?? "Nao iniciado"),
+    };
+
+    try {
+      const response = await authFetch(`${API_BASE_URL}/containers/${containerId}`, {
+        method: "PUT",
+        body: JSON.stringify(payload),
       });
-      Alert.alert("Container criado", "As informacoes foram salvas localmente.");
-      return;
+
+      if (!response.ok) {
+        const msg = await response.text();
+        Alert.alert("Erro", `Não foi possível salvar o container. ${msg}`);
+        return;
+      }
+
+      const form = new FormData();
+      const appendImages = (field: string, images: string[]) => {
+        images
+          .filter((uri) => uri.startsWith("file://") || uri.startsWith("content://"))
+          .forEach((uri, idx) => {
+            const name = `${field}-${idx}.jpg`;
+            form.append(field, {
+              uri,
+              name,
+              type: "image/jpeg",
+            } as any);
+          });
+      };
+
+      const sectionMap: Record<string, string> = {
+        empty: "vazioForrado",
+        partial: "fiada",
+        full: "cheioAberto",
+        "half-door": "meiaPorta",
+        seals: "lacresPrincipal",
+      };
+
+      normalized.photoSections.forEach((section) => {
+        const field = sectionMap[section.id];
+        if (field) {
+          appendImages(field, section.images);
+        }
+      });
+
+      let uploaded = false;
+      // @ts-ignore FormData parts
+      if ((form as any)._parts?.length) {
+        try {
+          const uploadResp = await authFetch(
+            `${API_BASE_URL}/containers/${containerId}/images`,
+            {
+              method: "POST",
+              body: form,
+            },
+          );
+          if (uploadResp.ok) {
+            uploaded = true;
+          } else {
+            const msg = await uploadResp.text();
+            console.warn("Falha ao enviar imagens:", msg);
+          }
+        } catch (e) {
+          console.warn("Erro ao enviar imagens:", e);
+        }
+      }
+
+      await fetchContainerDetail(containerId);
+      setDraftDetail(undefined);
+      setIsEditing(false);
+      Alert.alert("Sucesso", uploaded ? "Container e imagens atualizados." : "Container atualizado.");
+    } catch (e) {
+      Alert.alert("Erro", "Não foi possível salvar o container.");
     }
-    Alert.alert("Container atualizado", "As informacoes foram salvas localmente.");
   };
 
   const handleDeletePress = () => {
@@ -379,10 +536,25 @@ const ContainerDetails = () => {
           translucent
         />
         <View className="flex-1 items-center justify-center px-6">
-          <Text style={styles.missingTitle}>Container nao encontrado</Text>
-          <Text style={[styles.missingSubtitle, { textAlign: "center" }]}>
-            Verifique se o identificador informado esta correto ou selecione outro container.
-          </Text>
+          {loading ? (
+            <>
+              <ActivityIndicator size="large" color="#49C5B6" />
+              <Text style={{ marginTop: 12, color: "#2A2E40" }}>Carregando container...</Text>
+            </>
+          ) : (
+            <>
+              <Text style={styles.missingTitle}>{error || "Container nao encontrado"}</Text>
+              <Text style={[styles.missingSubtitle, { textAlign: "center" }]}>
+                Verifique se o identificador informado esta correto ou selecione outro container.
+              </Text>
+            </>
+          )}
+          <TouchableOpacity
+            style={[styles.actionButton, styles.cancelButton, { marginTop: 16 }]}
+            onPress={() => router.back()}
+          >
+            <Text style={[styles.actionButtonLabel, styles.cancelButtonText]}>Voltar</Text>
+          </TouchableOpacity>
         </View>
       </SafeAreaView>
     );
@@ -391,112 +563,75 @@ const ContainerDetails = () => {
 const infoFields = [
   {
     key: "code",
-    label: "Container",
+    label: "Identificação",
     value: isEditing ? draftDetail?.code ?? "" : displayDetail.code ?? "-",
-      editable: isEditing,
-      onChange: isEditing ? (value: string) => updateDraft("code", value) : undefined,
-      placeholder: "Identificador",
-    },
-    {
-      key: "sacariaQuantity",
-      label: "Quantidade de Sacaria",
-      value: isEditing
-        ? draftDetail?.sacariaQuantity ?? ""
-        : displayDetail.sacariaQuantity ?? "-",
-      editable: isEditing,
-      onChange: isEditing
-        ? (value: string) => updateDraft("sacariaQuantity", value)
-        : undefined,
-      placeholder: "Ex: 540 sacas",
-    },
-    {
-      key: "tare",
-      label: "Tara",
-      value: isEditing ? draftDetail?.tare ?? "" : displayDetail.tare ?? "-",
-      editable: isEditing,
-      onChange: isEditing ? (value: string) => updateDraft("tare", value) : undefined,
-      placeholder: "Ex: 2.220 kg",
-    },
-    {
-      key: "netWeight",
-      label: "Peso Liquido",
-      value: isEditing
-        ? draftDetail?.netWeight ?? ""
-        : displayDetail.netWeight ?? "-",
-      editable: isEditing,
-      onChange: isEditing
-        ? (value: string) => updateDraft("netWeight", value)
-        : undefined,
-      placeholder: "Ex: 27.000 kg",
-    },
-    {
-      key: "grossWeight",
-      label: "Peso Bruto",
-      value: isEditing
-        ? draftDetail?.grossWeight ?? ""
-        : displayDetail.grossWeight ?? "-",
-      editable: isEditing,
-      onChange: isEditing
-        ? (value: string) => updateDraft("grossWeight", value)
-        : undefined,
-      placeholder: "Ex: 27.081 kg",
-    },
-    {
-      key: "sealAgency",
-      label: "Lacre Agencia",
-      value: isEditing
-        ? draftDetail?.sealAgency ?? ""
-        : displayDetail.sealAgency ?? "-",
-      editable: isEditing,
-      onChange: isEditing
-        ? (value: string) => updateDraft("sealAgency", value)
-        : undefined,
-      placeholder: "Codigo do lacre",
-    },
-    {
-      key: "otherSeals",
-      label: "Lacres Outros",
-      value: isEditing
-        ? draftDetail?.otherSeals ?? ""
-        : displayDetail.otherSeals ?? "-",
-      editable: isEditing,
-      onChange: isEditing
-        ? (value: string) => updateDraft("otherSeals", value)
-        : undefined,
-      placeholder: "Observacoes",
-    },
-    {
-      key: "pickupDate",
-      label: "Data Retirada Terminal",
-      value: isEditing
-        ? draftDetail?.pickupDate ?? ""
-        : displayDetail.pickupDate
-          ? formatDate(displayDetail.pickupDate)
-          : "-",
-      editable: isEditing,
-      onChange: isEditing
-        ? (value: string) => updateDraft("pickupDate", value)
-        : undefined,
-      placeholder: "AAAA-MM-DD",
-    },
-    {
-      key: "stuffingDate",
-      label: "Data de Estufagem",
-      value: isEditing
-        ? draftDetail?.stuffingDate ?? ""
-        : displayDetail.stuffingDate
-          ? formatDate(displayDetail.stuffingDate)
-          : "-",
-      editable: isEditing,
-      onChange: isEditing
-        ? (value: string) => updateDraft("stuffingDate", value)
-        : undefined,
-    placeholder: "AAAA-MM-DD",
-    align: "center" as const,
+    editable: isEditing,
+    onChange: isEditing ? (value: string) => updateDraft("code", value) : undefined,
+    placeholder: "Identificador",
+  },
+  {
+    key: "description",
+    label: "Descrição",
+    value: isEditing ? draftDetail?.description ?? "" : displayDetail.description ?? "-",
+    editable: isEditing,
+    onChange: isEditing ? (value: string) => updateDraft("description", value) : undefined,
+    placeholder: "Descrição do container",
+  },
+  {
+    key: "sacariaQuantity",
+    label: "Quantidade de Sacas",
+    value: isEditing
+      ? draftDetail?.sacariaQuantity ?? ""
+      : displayDetail.sacariaQuantity ?? "-",
+    editable: isEditing,
+    onChange: isEditing
+      ? (value: string) => updateDraft("sacariaQuantity", value)
+      : undefined,
+    placeholder: "Ex: 300",
+  },
+  {
+    key: "tare",
+    label: "Tara (kg)",
+    value: isEditing ? draftDetail?.tare ?? "" : displayDetail.tare ?? "-",
+    editable: isEditing,
+    onChange: isEditing ? (value: string) => updateDraft("tare", value) : undefined,
+    placeholder: "Ex: 2500",
+  },
+  {
+    key: "netWeight",
+    label: "Peso Líquido (kg)",
+    value: isEditing ? draftDetail?.netWeight ?? "" : displayDetail.netWeight ?? "-",
+    editable: isEditing,
+    onChange: isEditing ? (value: string) => updateDraft("netWeight", value) : undefined,
+    placeholder: "Ex: 25000",
+  },
+  {
+    key: "grossWeight",
+    label: "Peso Bruto (kg)",
+    value: isEditing ? draftDetail?.grossWeight ?? "" : displayDetail.grossWeight ?? "-",
+    editable: isEditing,
+    onChange: isEditing ? (value: string) => updateDraft("grossWeight", value) : undefined,
+    placeholder: "Ex: 27500",
+  },
+  {
+    key: "sealAgency",
+    label: "Lacre Principal (agência)",
+    value: isEditing ? draftDetail?.sealAgency ?? "" : displayDetail.sealAgency ?? "-",
+    editable: isEditing,
+    onChange: isEditing ? (value: string) => updateDraft("sealAgency", value) : undefined,
+    placeholder: "Código do lacre",
+  },
+  {
+    key: "otherSeals",
+    label: "Outros Lacres",
+    value: isEditing ? draftDetail?.otherSeals ?? "" : displayDetail.otherSeals ?? "-",
+    editable: isEditing,
+    onChange: isEditing ? (value: string) => updateDraft("otherSeals", value) : undefined,
+    placeholder: "Ex: LAC1002, LAC1003",
   },
 ];
 
-const leftColumnKeys = ["code", "sacariaQuantity", "tare", "netWeight", "grossWeight"];
+const leftColumnKeys = ["code", "tare", "sealAgency", "otherSeals"];
 
 const columns = [
   infoFields.filter((field) => leftColumnKeys.includes(field.key)),
@@ -553,16 +688,16 @@ const columns = [
             <View
               style={[
                 styles.statusChip,
-                { backgroundColor: STATUS_MAP[displayDetail.status].background },
+                { backgroundColor: statusInfo.background },
               ]}
             >
               <Text
                 style={[
                   styles.statusChipText,
-                  { color: STATUS_MAP[displayDetail.status].color },
+                  { color: statusInfo.color },
                 ]}
               >
-                {STATUS_MAP[displayDetail.status].label}
+                {statusInfo.label}
               </Text>
             </View>
           </View>
@@ -724,7 +859,7 @@ const columns = [
                       ))
                     ) : (
                       <Text style={styles.imageEmptyText}>
-                        Nenhuma imagem anexada ainda. Use os botoes abaixo para adicionar.
+                        Nenhuma imagem anexada ainda.
                       </Text>
                     )}
                     <View style={styles.imageFooterActions}>
@@ -965,6 +1100,10 @@ const styles = StyleSheet.create({
   },
   infoGridField: {
     marginBottom: 16,
+  },
+  infoGridFieldCentered: {
+    marginBottom: 16,
+    alignItems: "center",
   },
   infoField: {
     width: "100%",

@@ -218,30 +218,34 @@ export default function TwoFactorModal({ isVisible, onClose }: TwoFactorModalPro
                 
                 {/* Inputs do código */}
                 <View className="flex-row justify-between mb-6">
-                  {code.map((digit, index) => (
-                    <TextInput
-                      key={index}
-                      ref={(ref) => (inputRefs.current[index] = ref)}
-                      className={`w-12 h-12 border-2 ${
-                        currentIndex === index ? 'border-indigo-500 bg-indigo-50' : 'border-gray-300'
-                      } rounded-lg text-center text-lg font-bold text-gray-800`}
-                      value={digit}
-                      onChangeText={(value) => handleInputChange(value, index)}
-                      onKeyPress={({ nativeEvent }) => handleKeyPress(nativeEvent.key, index)}
-                      onFocus={() => setCurrentIndex(index)}
-                      keyboardType="numeric"
-                      maxLength={1}
-                      selectTextOnFocus
-                      editable={!isSubmitting && !isLoading}
-                      style={{
-                        shadowColor: currentIndex === index ? '#4F46E5' : '#000',
-                        shadowOffset: { width: 0, height: 1 },
-                        shadowOpacity: currentIndex === index ? 0.1 : 0.05,
-                        shadowRadius: 2,
-                        elevation: currentIndex === index ? 2 : 1,
-                      }}
-                    />
-                  ))}
+                  {code.map((digit, index) => {
+                    const isActive = currentIndex === index;
+                    return (
+                      <TextInput
+                        key={index}
+                        ref={(ref) => (inputRefs.current[index] = ref)}
+                        className={`w-12 h-12 border ${
+                          isActive ? 'border-indigo-500 bg-indigo-50' : 'border-gray-300 bg-white'
+                        } rounded-lg text-center text-lg font-bold text-gray-800`}
+                        value={digit}
+                        onChangeText={(value) => handleInputChange(value, index)}
+                        onKeyPress={({ nativeEvent }) => handleKeyPress(nativeEvent.key, index)}
+                        onFocus={() => setCurrentIndex(index)}
+                        keyboardType="numeric"
+                        maxLength={1}
+                        selectTextOnFocus
+                        editable={!isSubmitting && !isLoading}
+                        style={{
+                          shadowColor: 'transparent',
+                          shadowOffset: { width: 0, height: 0 },
+                          shadowOpacity: 0,
+                          shadowRadius: 0,
+                          elevation: 0,
+                          borderWidth: 1.5,
+                        }}
+                      />
+                    );
+                  })}
                 </View>
                 
                 {/* Indicador de progresso */}
@@ -275,18 +279,6 @@ export default function TwoFactorModal({ isVisible, onClose }: TwoFactorModalPro
                   )}
                 </TouchableOpacity>
                 
-                {/* Link para reenviar código */}
-                <TouchableOpacity 
-                  className="w-full py-2"
-                  onPress={() => {
-                    Alert.alert('Reenviar Código', 'Funcionalidade em desenvolvimento');
-                  }}
-                  disabled={isSubmitting || isLoading}
-                >
-                  <Text className="text-indigo-600 text-center font-medium">
-                    Não recebeu o código? Reenviar
-                  </Text>
-                </TouchableOpacity>
               </View>
             </View>
           </TouchableWithoutFeedback>

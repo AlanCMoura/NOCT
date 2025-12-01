@@ -16,6 +16,7 @@ interface OperationCardData {
   status?: string;
   photoCount?: number;
   responsible?: string;
+  containerCount?: number;
 }
 
 interface ListItemProps {
@@ -24,25 +25,32 @@ interface ListItemProps {
 }
 
 const STATUS_STYLES: Record<string, { background: string; text: string }> = {
-  aberta: { background: "#DCFCE7", text: "#16A34A" },
-  fechada: { background: "#E0EAFF", text: "#3730A3" },
-  pendente: { background: "#FEF3C7", text: "#B45309" },
+  andamento: { background: "#D1FAE5", text: "#047857" },
+  fechada: { background: "#E0E7FF", text: "#4338CA" },
   default: { background: "#E5E7EB", text: "#374151" },
 };
 
 const ListItem: React.FC<ListItemProps> = ({ data, onPress }) => {
-  const statusLabelRaw = data.status?.trim();
-  const statusLabel =
-    statusLabelRaw && statusLabelRaw.length > 0 ? statusLabelRaw : "Aberta";
-  const normalizedStatus = statusLabel.toLowerCase();
+  const statusLabelRaw = data.status?.trim().toLowerCase() ?? "";
+  const isClosed =
+    statusLabelRaw.includes("fech") ||
+    statusLabelRaw.includes("close") ||
+    statusLabelRaw.includes("final") ||
+    statusLabelRaw.includes("compl");
+  const statusLabel = isClosed ? "Fechada" : "Em andamento";
+  const normalizedStatus = isClosed ? "fechada" : "andamento";
   const statusTheme = STATUS_STYLES[normalizedStatus] ?? STATUS_STYLES.default;
   const trimmedOperationCode = data.operationCode?.trim() ?? "";
+  const containerCount =
+    typeof data.containerCount === "number" ? data.containerCount : 0;
   const operationLabel =
-    typeof data.operationId === "number" && Number.isFinite(data.operationId)
-      ? `OP-${data.operationId}`
-      : trimmedOperationCode.length > 0
-        ? trimmedOperationCode
-        : "Operacao";
+    data.containerId?.trim().length
+      ? data.containerId.trim()
+      : typeof data.operationId === "number" && Number.isFinite(data.operationId)
+        ? `OP-${data.operationId}`
+        : trimmedOperationCode.length > 0
+          ? trimmedOperationCode
+          : "Operacao";
 
   return (
     <TouchableOpacity
@@ -51,7 +59,7 @@ const ListItem: React.FC<ListItemProps> = ({ data, onPress }) => {
       onPress={() => onPress?.(data)}
     >
       <View
-        className="bg-white rounded-2xl p-5 mb-4 border"
+        className="bg-white rounded-2xl p-5 mb-2 border"
         style={{
           borderColor: "#E5E7EB",
           shadowColor: "#000000",
@@ -75,7 +83,13 @@ const ListItem: React.FC<ListItemProps> = ({ data, onPress }) => {
             >
               {operationLabel}
             </Text>
-          </View>
+            <Text
+          className="text-xs font-semibold mt-1"
+          style={{ color: "#6B7280" }}
+        >
+          {containerCount} {containerCount === 1 ? "container" : "containers"}
+        </Text>
+      </View>
           <View
             className="px-3 py-1 rounded-full"
             style={{ backgroundColor: statusTheme.background }}

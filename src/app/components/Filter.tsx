@@ -48,9 +48,9 @@ const FilterButton: React.FC<FilterButtonProps> = ({
     },
     { 
       id: 2, 
-      name: 'Container ID', 
+      name: 'CTV do Container', 
       field: 'containerId',
-      description: 'Buscar por identificação do container'
+      description: 'Buscar pelo CTV / identificação do container'
     },
   ];
 
@@ -173,7 +173,7 @@ const FilterButton: React.FC<FilterButtonProps> = ({
         {/* Indicador do filtro ativo */}
         <View style={styles.activeIndicator}>
           <Text style={styles.activeIndicatorText}>
-            {currentFilterField === 'id' ? 'ID' : 'Container'}
+            {currentFilterField === 'id' ? 'ID' : 'CTV'}
           </Text>
         </View>
       </TouchableOpacity>

@@ -7,9 +7,9 @@ import ListItem, { OperationCardData } from "../components/Operations";
 import FilterButton from '../components/Filter';
 import Sidebar from '../components/Sidebar';
 import { router } from 'expo-router';
-import { useAuth } from '../contexts/_AuthContext';
-import { MOCK_OPERATIONS } from '../mocks/mockOperations';
+import { useAuth, useAuthenticatedFetch } from '../contexts/_AuthContext';
 import CustomStatusBar from '../components/StatusBar'; // Importando o componente CustomStatusBar
+import { API_BASE_URL } from '../config/apiConfig';
 
 // Interop para permitir o uso de classes Tailwind em componentes React Native
 cssInterop(View, { className: 'style' });
@@ -22,42 +22,52 @@ cssInterop(Animated.View, { className: 'style' });
 // Define o tipo para search field
 type SearchField = 'id' | 'containerId';
 
-// Interface para User baseada na resposta real da API
-interface User {
-  id: number;
-  firstName: string;
-  lastName: string;
-  cpf: string;
-  email: string;
-  password: string;
-  role: string;
-  twoFactorEnabled: boolean;
-}
+type ApiUser = {
+  id?: number;
+  firstName?: string;
+  lastName?: string;
+  cpf?: string;
+  email?: string;
+  role?: string;
+  twoFactorEnabled?: boolean;
+};
 
-// Interface para Container baseada na resposta real da API
-interface Container {
-  id: string;
-  description: string;
-  images: string[];
-}
+type ApiContainer = {
+  id?: string;
+  description?: string;
+  images?: string[];
+  ctv?: string;
+  containerId?: string;
+  code?: string;
+};
 
-// Interface para OperationItem baseada na resposta REAL da API
+type ApiOperation = {
+  id?: number;
+  ctv?: string;
+  status?: string;
+  createdAt?: string;
+  user?: ApiUser;
+  container?: ApiContainer;
+  containers?: ApiContainer[];
+  containerList?: ApiContainer[];
+  containerCount?: number;
+  sackImages?: Array<{ url?: string; imageUrl?: string; signedUrl?: string } | string>;
+};
+
 interface OperationItem {
   id: number;
-  container: Container; // ← Objeto container completo
-  user: User; // ← Objeto user completo (já vem na resposta)
+  container: ApiContainer;
+  user: ApiUser;
   createdAt: string;
-  
-  // Campo calculado para compatibilidade
   qtde_fotos: number;
-  
-  // Índice para compatibilidade com o componente ListItem
-  [key: string]: any;
+  status?: string;
+  containerCount?: number;
+  ctv?: string;
 }
 
 // Configuração da API
 export default function Logs() {
-  const [searchField, setSearchField] = useState<SearchField>('id');
+  const [searchField, setSearchField] = useState<SearchField>('containerId');
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(false);
   const translateX = useRef(new Animated.Value(-256)).current;
   const overlayOpacity = useRef(new Animated.Value(0)).current;
@@ -70,65 +80,187 @@ export default function Logs() {
   
   // Hooks de autenticação
   const { isAuthenticated } = useAuth();
+  const authenticatedFetch = useAuthenticatedFetch();
   const insets = useSafeAreaInsets();
   const headerPaddingTop = Math.max(insets.top, 12) + 12;
 
-  // Função para mapear dados da API real para o formato esperado pelos componentes
-  const mapOperationData = (apiResponse: any): OperationItem => {
-    const mappedData: OperationItem = {
-      id: apiResponse.id,
-      container: apiResponse.container,
-      user: apiResponse.user,
-      createdAt: apiResponse.createdAt,
-      
-      // Campo calculado
-      qtde_fotos: apiResponse.container?.images?.length || 0,
+  const mapOperationData = (apiResponse: ApiOperation): OperationItem => {
+    const fallbackContainer =
+      apiResponse.container ||
+      (apiResponse.containers && apiResponse.containers.length > 0
+        ? apiResponse.containers[0]
+        : { id: '', description: '', images: [] });
+
+    const ctv =
+      apiResponse.ctv ??
+      fallbackContainer?.ctv ??
+      fallbackContainer?.containerId ??
+      fallbackContainer?.code ??
+      fallbackContainer?.id ??
+      '';
+
+    const normalizedContainer: ApiContainer = {
+      ...fallbackContainer,
+      id: ctv || fallbackContainer?.id || '',
     };
 
-    console.log('[Logs] Mapeando operacao:', {
-      id: mappedData.id,
-      containerId: mappedData.container?.id || 'N/A',
-      imageCount: mappedData.qtde_fotos,
-      hasUser: !!mappedData.user,
-      userName: mappedData.user ? `${mappedData.user.firstName} ${mappedData.user.lastName}` : 'N/A'
-    });
+    const images =
+      normalizedContainer?.images ??
+      (Array.isArray((normalizedContainer as any)?.imageUrls)
+        ? (normalizedContainer as any).imageUrls
+        : undefined) ??
+      (Array.isArray((normalizedContainer as any)?.photos)
+        ? (normalizedContainer as any).photos
+        : undefined) ??
+      (Array.isArray((normalizedContainer as any)?.sackImages)
+        ? (normalizedContainer as any).sackImages
+        : undefined) ??
+      [];
+
+    const safeImages = Array.isArray(images) ? images : [];
+    const sackImageList = Array.isArray(apiResponse.sackImages)
+      ? apiResponse.sackImages
+          .map((img) =>
+            typeof img === "string"
+              ? img
+              : img?.signedUrl || img?.imageUrl || img?.url || undefined,
+          )
+          .filter((u): u is string => !!u && u.length > 0)
+      : [];
+    const containerCountFromApi = (apiResponse as any)?.containerCount;
+    const parsedContainerCount =
+      typeof containerCountFromApi === 'string'
+        ? Number(containerCountFromApi)
+        : typeof containerCountFromApi === 'number'
+          ? containerCountFromApi
+          : undefined;
+
+    const containerCount =
+      (Number.isFinite(parsedContainerCount) ? parsedContainerCount : undefined) ??
+      (Array.isArray(apiResponse.containers) ? apiResponse.containers.length : undefined) ??
+      (Array.isArray(apiResponse.containerList) ? apiResponse.containerList.length : undefined) ??
+      (fallbackContainer?.id ? 1 : 0);
+
+    const mappedData: OperationItem = {
+      id: apiResponse.id ?? 0,
+      container: normalizedContainer ?? { id: '' },
+      user: apiResponse.user ?? {},
+      createdAt: apiResponse.createdAt ?? '',
+      status: apiResponse.status,
+      qtde_fotos: safeImages.length || sackImageList.length,
+      containerCount,
+      ctv,
+    };
 
     return mappedData;
   };
 
-  // Função para mapear dados para o componente ListItem
   const mapDataForListItem = (item: OperationItem): OperationCardData => {
+    const statusLabel = item.status ?? 'Aberta';
+    const operationLabel =
+      item.ctv ||
+      item.container?.id ||
+      item.container?.containerId ||
+      item.container?.code ||
+      (item.id ? `OP-${item.id}` : 'Operacao');
+
     return {
       operationId: item.id,
-      operationCode: `OP-${item.id}`,
-      containerId: item.container?.id || '',
+      operationCode: operationLabel,
+      containerId:
+        item.ctv ||
+        item.container?.id ||
+        (item.container as any)?.containerId ||
+        (item.container as any)?.ctv ||
+        '',
       reservation: item.container?.description || undefined,
       vessel: undefined,
       createdAt: item.createdAt,
-      status: undefined,
+      status: statusLabel,
       photoCount: item.qtde_fotos,
-      responsible: item.user ? `${item.user.firstName} ${item.user.lastName}` : undefined,
+      containerCount: item.containerCount,
+      responsible:
+        item.user && (item.user.firstName || item.user.lastName)
+          ? `${item.user.firstName ?? ''} ${item.user.lastName ?? ''}`.trim()
+          : undefined,
     };
   };
 
-  // Função para buscar operações do backend
   const fetchOperations = async (showLoadingIndicator = true) => {
     if (showLoadingIndicator) {
       setLoading(true);
     }
 
+    const fetchContainerCount = async (operationId: number): Promise<number | null> => {
+      try {
+        const response = await authenticatedFetch(
+          `${API_BASE_URL}/containers/by-operation/${operationId}?page=0&size=1&sortBy=id&sortDirection=ASC`,
+        );
+        if (!response.ok) return null;
+        const data = await response.json();
+        const totalElements = (data && typeof data.totalElements === 'number') ? data.totalElements : null;
+        if (Number.isFinite(totalElements)) return totalElements as number;
+        if (Array.isArray(data?.content)) return data.content.length;
+        return null;
+      } catch {
+        return null;
+      }
+    };
+
+    const applyContainerCount = (operationId: number, count: number) => {
+      setOperations((prev) =>
+        prev.map((op) => (op.id === operationId ? { ...op, containerCount: count } : op)),
+      );
+      setFilteredOperations((prev) =>
+        prev.map((op) => (op.id === operationId ? { ...op, containerCount: count } : op)),
+      );
+    };
+
     try {
-      const mappedOperations = MOCK_OPERATIONS.map(mapOperationData);
+      const response = await authenticatedFetch(
+        `${API_BASE_URL}/operations?page=0&size=50&sort=id,DESC`,
+      );
+
+      if (!response.ok) {
+        const message = `Erro ${response.status} ao buscar operações`;
+        console.error('[Logs] Falha na API de operações:', message);
+        Alert.alert('Erro', message);
+        return;
+      }
+
+      const data = await response.json();
+      const content: ApiOperation[] = Array.isArray(data?.content)
+        ? data.content
+        : Array.isArray(data)
+          ? data
+          : [];
+
+      const mappedOperations = content
+        .map(mapOperationData)
+        .filter((item) => Number.isFinite(item.id) && item.id !== 0);
       setOperations(mappedOperations);
       setFilteredOperations(mappedOperations);
 
-      console.log('[Logs] Operacoes demonstrativas carregadas:', {
+      const missingCounts = mappedOperations.filter(
+        (item) => item.containerCount === undefined || item.containerCount === null,
+      );
+      if (missingCounts.length) {
+        missingCounts.forEach(async (item) => {
+          if (!Number.isFinite(item.id)) return;
+          const count = await fetchContainerCount(item.id);
+          if (count !== null) {
+            applyContainerCount(item.id, count);
+          }
+        });
+      }
+
+      console.log('[Logs] Operações carregadas da API:', {
         quantidade: mappedOperations.length,
-        exemplo: mappedOperations.length > 0 ? mappedOperations[0].id : 'NENHUMA OPERAÇÃO',
+        exemplo: mappedOperations.length > 0 ? mappedOperations[0].id : 'NENHUMA',
       });
     } catch (error) {
-      console.error('[Logs] Erro ao carregar operacoes demonstrativas:', error);
-      Alert.alert('Erro', 'Não foi possível carregar as operações demonstrativas.');
+      console.error('[Logs] Erro ao carregar operações da API:', error);
+      Alert.alert('Erro', 'Não foi possível carregar as operações.');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -155,7 +287,12 @@ export default function Logs() {
           return searchValue.includes(searchText) || 
                  operationFormat.toLowerCase().includes(searchText.toLowerCase());
         } else if (searchField === 'containerId') {
-          const searchValue = item.container?.id || '';
+          const searchValue =
+            item.ctv ||
+            item.container?.id ||
+            (item.container as any)?.ctv ||
+            (item.container as any)?.containerId ||
+            '';
           return searchValue.toLowerCase().includes(searchText.toLowerCase());
         }
         
@@ -313,7 +450,7 @@ export default function Logs() {
         {/* Search Bar */}
         <View className="px-6 mt-6 w-full flex-row items-center">
           <TextInput
-            placeholder={`Pesquise por ${searchField === 'id' ? 'ID da operação' : 'container'}`}
+            placeholder={`Pesquise por ${searchField === 'id' ? 'ID da operação' : 'CTV do container'}`}
             placeholderTextColor="#6D7380"
             value={searchText}
             onChangeText={setSearchText}

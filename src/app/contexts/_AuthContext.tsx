@@ -38,6 +38,8 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+const normalizeCpf = (value: string) => value.replace(/\D/g, '');
+
 // Configurações da API
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [token, setToken] = useState<string | null>(null); // Token definitivo para sessão
@@ -67,6 +69,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     try {
       setIsLoading(true);
+      const formattedCpf = cpf;
+      const cleanCpf = normalizeCpf(cpf);
       
       console.log('🔄 Iniciando login...');
       
@@ -76,18 +80,40 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          cpf: cpf, // Envia CPF COM formatação (pontos e traços)
+          cpf: formattedCpf,
           password: password
         })
       });
 
       if (!response.ok) {
-        const errorMessage = getErrorMessage(response.status);
+        let serverMessage = '';
+        try {
+          const body = await response.json();
+          serverMessage = body?.message ?? body ?? '';
+        } catch {
+          // ignore parse errors
+        }
+        const errorMessage = serverMessage || getErrorMessage(response.status);
         Alert.alert('Erro de Login', errorMessage);
+        setTempToken(null);
+        setRequiresTwoFactor(false);
         return false;
       }
 
-      const loginData: LoginResponse = await response.json();
+      const rawLogin: Record<string, any> = await response.json();
+      const tokenFromApi = rawLogin.token ?? rawLogin.accessToken ?? rawLogin.jwt;
+      const tempTokenFromApi = rawLogin.tempToken ?? rawLogin.temporaryToken ?? rawLogin.tempJwt;
+      const loginData: LoginResponse = {
+        cpf: rawLogin.cpf ?? formattedCpf ?? cleanCpf,
+        requiresTwoFactor: !!(
+          rawLogin.requiresTwoFactor ??
+          rawLogin.twoFactorEnabled ??
+          rawLogin.twoFactor ??
+          rawLogin.two_factor
+        ),
+        token: tokenFromApi ?? undefined,
+        temporaryToken: tempTokenFromApi ?? undefined,
+      };
       
       console.log('📋 Resposta do login:', { 
         cpf: loginData.cpf, 
@@ -202,19 +228,37 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (!response.ok) {
         let errorDetails = '';
         try {
-          const errorData = await response.text();
-          errorDetails = errorData;
+          const errorData = await response.json();
+          errorDetails = errorData?.message ?? JSON.stringify(errorData);
           console.log('📄 Detalhes do erro:', errorData);
         } catch (e) {
           console.log('❌ Erro ao ler resposta:', e);
         }
         
         const errorMessage = get2FAErrorMessage(response.status);
-        Alert.alert('Erro na Verificação', `${errorMessage}\n\n${errorDetails}`);
+        Alert.alert('Erro na Verificação', errorDetails || errorMessage);
         return false;
       }
 
-      const twoFAData: TwoFAResponse = await response.json();
+      const rawTwoFA: Record<string, any> = await response.json();
+      const finalToken =
+        rawTwoFA.token ??
+        rawTwoFA.accessToken ??
+        rawTwoFA.jwt ??
+        rawTwoFA.Authorization ??
+        rawTwoFA.authorization ??
+        null;
+
+      if (!finalToken) {
+        Alert.alert('Erro', 'Token definitivo não recebido na verificação 2FA.');
+        return false;
+      }
+
+      const twoFAData: TwoFAResponse = {
+        cpf: rawTwoFA.cpf ?? user?.cpf ?? '',
+        token: finalToken,
+        status: rawTwoFA.status ?? 'authenticated',
+      };
       
       console.log('✅ 2FA verificado com sucesso:', { 
         cpf: twoFAData.cpf,

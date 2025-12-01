@@ -266,7 +266,7 @@ export default function RegisterScreen() {
     const userData = {
       firstName: firstName.trim(),
       lastName: lastName.trim(),
-      cpf: cpf, // Envia CPF COM formatação (pontos e traços)
+      cpf: cpf, // Envia CPF com máscara
       email: email.trim().toLowerCase(),
       password,
       role,
