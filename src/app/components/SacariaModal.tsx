@@ -9,10 +9,11 @@ import {
   Image,
   Dimensions,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { Svg, Path } from 'react-native-svg';
 import { cssInterop } from 'nativewind';
-import type { OperationCargoDetail } from '../mocks/mockOperationDetails';
+import type { OperationCargoDetail } from '../types/operation';
 import * as ImagePicker from 'expo-image-picker';
 
 cssInterop(View, { className: 'style' });
@@ -26,7 +27,7 @@ interface SacariaModalProps {
   visible: boolean;
   onClose: () => void;
   cargo?: OperationCargoDetail;
-  onSave?: (updatedCargo: OperationCargoDetail) => void;
+  onSave?: (updatedCargo: OperationCargoDetail) => void | Promise<void>;
   isOperationClosed?: boolean;
 }
 
@@ -50,16 +51,20 @@ const hashString = (str: string): string => {
 
 // Gerar ID único baseado na URI (estável para mesma URI)
 const generateStableId = (uri: string): string => {
-  // Para URIs locais, usar hash da URI
   // Para URLs do S3, extrair a key do arquivo
   if (uri.includes('s3.amazonaws.com') || uri.includes('s3.')) {
-    // Extrair nome do arquivo da URL do S3
     const match = uri.match(/\/([^/?]+)\?/) || uri.match(/\/([^/]+)$/);
     if (match) {
       return `s3-${hashString(match[1])}`;
     }
   }
-  return `local-${hashString(uri)}-${Date.now()}`;
+  // Para URIs locais, usar apenas hash da URI (sem Date.now() para estabilidade)
+  return `local-${hashString(uri)}`;
+};
+
+// Verificar se é uma URL do S3
+const isS3Url = (uri: string): boolean => {
+  return uri.includes('s3.amazonaws.com') || uri.includes('s3.');
 };
 
 const SacariaModal: React.FC<SacariaModalProps> = ({
@@ -71,8 +76,9 @@ const SacariaModal: React.FC<SacariaModalProps> = ({
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editingImages, setEditingImages] = useState<string[]>([]);
+  const [failedImages, setFailedImages] = useState<string[]>([]);
   const [isPickingImage, setIsPickingImage] = useState(false);
-  const [renderKey, setRenderKey] = useState(0); // Força re-render
+  const [isSaving, setIsSaving] = useState(false);
 
   // Imagens do cargo original (somente leitura quando não está editando)
   const originalImages = useMemo(() => {
@@ -92,10 +98,12 @@ const SacariaModal: React.FC<SacariaModalProps> = ({
   useEffect(() => {
     if (visible) {
       setEditingImages([...originalImages]);
-      setRenderKey((prev) => prev + 1);
+      setFailedImages([]);
     } else {
       setEditingImages([]);
+      setFailedImages([]);
       setIsEditing(false);
+      setIsSaving(false);
     }
   }, [visible, originalImages]);
 
@@ -107,7 +115,9 @@ const SacariaModal: React.FC<SacariaModalProps> = ({
   }, [isOperationClosed, isEditing]);
 
   // Imagens a exibir
-  const displayImages = isEditing ? editingImages : originalImages;
+  const displayImages = (isEditing ? editingImages : originalImages).filter(
+    (uri) => !failedImages.includes(uri),
+  );
   const imageCount = displayImages.length;
 
   const carouselWidth = Dimensions.get('window').width;
@@ -137,7 +147,7 @@ const SacariaModal: React.FC<SacariaModalProps> = ({
 
   // Selecionar imagem do dispositivo
   const handleSelectImage = async (source: 'library' | 'camera') => {
-    if (isPickingImage) return;
+    if (isPickingImage || isSaving) return;
 
     try {
       setIsPickingImage(true);
@@ -183,64 +193,90 @@ const SacariaModal: React.FC<SacariaModalProps> = ({
 
   // Iniciar edição
   const handleBeginEdit = () => {
-    if (!cargo || isOperationClosed) return;
+    if (!cargo || isOperationClosed || isSaving) return;
     setEditingImages([...originalImages]);
     setIsEditing(true);
   };
 
   // Cancelar edição
   const handleCancelEdit = () => {
+    if (isSaving) return;
     setEditingImages([...originalImages]);
     setIsEditing(false);
   };
 
-  // Salvar edição
-  const handleSaveEdit = () => {
-    if (!onSave) {
-      setIsEditing(false);
-      return;
-    }
-
-    // Remover duplicatas mantendo a ordem
-    const uniqueImages = editingImages.filter(
-      (uri, index, self) => uri.trim().length > 0 && self.indexOf(uri) === index
-    );
-
-    console.log('💾 Salvando', uniqueImages.length, 'imagens');
-
-    onSave({
-      title: cargo?.title ?? 'Sacaria',
-      description: cargo?.description ?? 'Imagens da sacaria desta operação',
-      images: uniqueImages,
-      notes: cargo?.notes,
-    });
-
+  // Fechar modal com limpeza de estado
+  const handleClose = () => {
+    if (isSaving) return;
+    setEditingImages([]);
     setIsEditing(false);
+    onClose();
+  };
+
+  // Salvar edição (com suporte a async)
+  const handleSaveEdit = async () => {
+    if (!onSave || isSaving) return;
+
+    setIsSaving(true);
+
+    try {
+      // Remover duplicatas mantendo a ordem
+      const uniqueImages = editingImages.filter(
+        (uri, index, self) => uri.trim().length > 0 && self.indexOf(uri) === index
+      );
+
+      console.log('💾 Salvando', uniqueImages.length, 'imagens');
+
+      await onSave({
+        title: cargo?.title ?? 'Sacaria',
+        description: cargo?.description ?? 'Imagens da sacaria desta operação',
+        images: uniqueImages,
+        notes: cargo?.notes,
+      });
+
+      setIsEditing(false);
+    } catch (error) {
+      console.error('Erro ao salvar imagens:', error);
+      Alert.alert('Erro', 'Não foi possível salvar as imagens. Tente novamente.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const canEdit = Boolean(onSave) && !isOperationClosed;
 
+  // Tratar falha de carregamento (remove da lista atual e marca como falha)
+  const handleImageError = useCallback((uri: string) => {
+    setFailedImages((prev) => (prev.includes(uri) ? prev : [...prev, uri]));
+    setEditingImages((prev) => prev.filter((item) => item !== uri));
+  }, []);
+
   // Renderizar imagem individual no editor
-  const renderEditorImage = (uri: string, index: number) => {
-    const imageKey = `edit-${generateStableId(uri)}-${index}`;
-    
+  const renderEditorImage = (uri: string) => {
+    const imageKey = `edit-${generateStableId(uri)}`;
+    const index = editingImages.indexOf(uri);
+
     return (
       <View key={imageKey} style={styles.imageCard}>
         <View style={styles.imagePreview}>
           <Image
-            source={{ uri, cache: 'reload' }}
+            source={{ uri, cache: isS3Url(uri) ? 'reload' : 'default' }}
             style={styles.imageThumbnail}
             resizeMode="cover"
+            onError={() => handleImageError(uri)}
           />
         </View>
         <View style={styles.imageMeta}>
           <Text style={styles.imageLabel}>Imagem {index + 1}</Text>
           <TouchableOpacity
             onPress={() => handleRemoveImage(uri)}
-            style={styles.removeImageButton}
+            style={[styles.removeImageButton, isSaving && styles.buttonDisabled]}
             activeOpacity={0.7}
+            disabled={isSaving}
           >
-            <Text style={styles.removeImageText}>Remover</Text>
+            <Text style={[styles.removeImageText, isSaving && styles.textDisabled]}>
+              Remover
+            </Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -271,7 +307,7 @@ const SacariaModal: React.FC<SacariaModalProps> = ({
         contentContainerStyle={[styles.carouselContent, { paddingHorizontal: CAROUSEL_ITEM_SPACING }]}
       >
         {displayImages.map((uri, index) => {
-          const imageKey = `carousel-${renderKey}-${generateStableId(uri)}-${index}`;
+          const imageKey = `carousel-${generateStableId(uri)}`;
           return (
             <View
               key={imageKey}
@@ -281,9 +317,10 @@ const SacariaModal: React.FC<SacariaModalProps> = ({
               ]}
             >
               <Image
-                source={{ uri, cache: 'reload' }}
+                source={{ uri, cache: isS3Url(uri) ? 'reload' : 'default' }}
                 style={styles.carouselImage}
                 resizeMode="cover"
+                onError={() => handleImageError(uri)}
               />
             </View>
           );
@@ -293,7 +330,7 @@ const SacariaModal: React.FC<SacariaModalProps> = ({
   };
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={handleClose}>
       <View style={styles.overlay}>
         <View style={styles.modalCard}>
           {/* Header */}
@@ -311,17 +348,30 @@ const SacariaModal: React.FC<SacariaModalProps> = ({
                   <>
                     <TouchableOpacity
                       onPress={handleCancelEdit}
-                      style={[styles.headerButton, styles.cancelButton]}
+                      style={[styles.headerButton, styles.cancelButton, isSaving && styles.buttonDisabled]}
                       activeOpacity={0.75}
+                      disabled={isSaving}
                     >
-                      <Text style={[styles.headerButtonText, styles.cancelButtonText]}>Cancelar</Text>
+                      <Text style={[styles.headerButtonText, styles.cancelButtonText, isSaving && styles.textDisabled]}>
+                        Cancelar
+                      </Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       onPress={handleSaveEdit}
-                      style={[styles.headerButton, styles.saveButton]}
+                      style={[styles.headerButton, styles.saveButton, isSaving && styles.saveButtonSaving]}
                       activeOpacity={0.75}
+                      disabled={isSaving}
                     >
-                      <Text style={[styles.headerButtonText, styles.saveButtonText]}>Salvar</Text>
+                      {isSaving ? (
+                        <View style={styles.savingContainer}>
+                          <ActivityIndicator size="small" color="#FFFFFF" />
+                          <Text style={[styles.headerButtonText, styles.saveButtonText, { marginLeft: 8 }]}>
+                            Salvando...
+                          </Text>
+                        </View>
+                      ) : (
+                        <Text style={[styles.headerButtonText, styles.saveButtonText]}>Salvar</Text>
+                      )}
                     </TouchableOpacity>
                   </>
                 ) : (
@@ -333,8 +383,13 @@ const SacariaModal: React.FC<SacariaModalProps> = ({
                     <Text style={[styles.headerButtonText, styles.editButtonText]}>Editar</Text>
                   </TouchableOpacity>
                 ))}
-              <TouchableOpacity onPress={onClose} style={styles.closeButton} activeOpacity={0.7}>
-                <CloseIcon />
+              <TouchableOpacity
+                onPress={handleClose}
+                style={[styles.closeButton, isSaving && styles.buttonDisabled]}
+                activeOpacity={0.7}
+                disabled={isSaving}
+              >
+                <CloseIcon color={isSaving ? '#9CA3AF' : '#2A2E40'} />
               </TouchableOpacity>
             </View>
           </View>
@@ -344,26 +399,26 @@ const SacariaModal: React.FC<SacariaModalProps> = ({
             {isEditing ? (
               <View style={styles.imageEditorSection}>
                 <Text style={styles.imageEditorTitle}>Imagens da sacaria</Text>
-                
+
                 {/* Toolbar */}
                 <View style={styles.imageToolbar}>
                   <TouchableOpacity
                     onPress={() => handleSelectImage('library')}
-                    style={[styles.toolbarButton, isPickingImage && styles.toolbarButtonDisabled]}
+                    style={[styles.toolbarButton, (isPickingImage || isSaving) && styles.toolbarButtonDisabled]}
                     activeOpacity={0.75}
-                    disabled={isPickingImage}
+                    disabled={isPickingImage || isSaving}
                   >
-                    <Text style={[styles.toolbarButtonText, isPickingImage && styles.toolbarButtonTextDisabled]}>
+                    <Text style={[styles.toolbarButtonText, (isPickingImage || isSaving) && styles.toolbarButtonTextDisabled]}>
                       Anexar do dispositivo
                     </Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     onPress={() => handleSelectImage('camera')}
-                    style={[styles.toolbarButton, isPickingImage && styles.toolbarButtonDisabled]}
+                    style={[styles.toolbarButton, (isPickingImage || isSaving) && styles.toolbarButtonDisabled]}
                     activeOpacity={0.75}
-                    disabled={isPickingImage}
+                    disabled={isPickingImage || isSaving}
                   >
-                    <Text style={[styles.toolbarButtonText, isPickingImage && styles.toolbarButtonTextDisabled]}>
+                    <Text style={[styles.toolbarButtonText, (isPickingImage || isSaving) && styles.toolbarButtonTextDisabled]}>
                       Tirar foto
                     </Text>
                   </TouchableOpacity>
@@ -372,7 +427,7 @@ const SacariaModal: React.FC<SacariaModalProps> = ({
                 {/* Lista de imagens */}
                 <View style={styles.imageEditorList}>
                   {editingImages.length > 0 ? (
-                    editingImages.map((uri, index) => renderEditorImage(uri, index))
+                    editingImages.map((uri) => renderEditorImage(uri))
                   ) : (
                     <View style={styles.editorEmpty}>
                       <Text style={styles.editorEmptyTitle}>Nenhuma imagem adicionada</Text>
@@ -458,9 +513,27 @@ const styles = StyleSheet.create({
   },
   saveButton: {
     backgroundColor: '#49C5B6',
+    minWidth: 80,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  saveButtonSaving: {
+    backgroundColor: '#3BA89A',
+    minWidth: 120,
   },
   saveButtonText: {
     color: '#FFFFFF',
+  },
+  savingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  buttonDisabled: {
+    opacity: 0.5,
+  },
+  textDisabled: {
+    color: '#9CA3AF',
   },
   content: {
     paddingBottom: 24,

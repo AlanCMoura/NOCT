@@ -3,8 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, Modal, ScrollView, ActivityIndicator, Image, Dimensions } from 'react-native';
 import { cssInterop } from 'nativewind';
 import { Svg, Path } from 'react-native-svg';
-import { API_BASE_URL, API_ENABLED } from '../config/apiConfig';
-import { getMockContainerImages } from '../mocks/mockOperations';
+import { API_BASE_URL } from '../config/apiConfig';
 
 // Configuração do cssInterop
 cssInterop(View, { className: 'style' });
@@ -71,14 +70,6 @@ const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ isVisible, onClose, i
   const fetchPresignedUrls = async () => {
     if (!item?.container?.id) {
       setError('Container ID não disponível');
-      return;
-    }
-
-    if (!API_ENABLED) {
-      const mockImages = getMockContainerImages(item.container.id);
-      setPresignedUrls(mockImages);
-      setError(null);
-      setLoading(false);
       return;
     }
 

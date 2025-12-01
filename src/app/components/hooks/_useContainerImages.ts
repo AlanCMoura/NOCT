@@ -1,7 +1,6 @@
 // src/hooks/useContainerImages.ts
 import { useState, useEffect } from 'react';
-import { API_BASE_URL, API_ENABLED } from '../../config/apiConfig';
-import { getMockContainerImages } from '../../mocks/mockOperations';
+import { API_BASE_URL } from '../../config/apiConfig';
 
 interface UseContainerImagesProps {
   containerId: string;
@@ -26,14 +25,6 @@ export const useContainerImages = ({
   const fetchImages = async () => {
     if (!containerId) {
       setError('Container ID não fornecido');
-      setLoading(false);
-      return;
-    }
-    
-    if (!API_ENABLED) {
-      const mockImages = getMockContainerImages(containerId);
-      setPresignedUrls(mockImages);
-      setError(null);
       setLoading(false);
       return;
     }

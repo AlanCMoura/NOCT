@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -20,7 +20,7 @@ import SacariaModal from "../components/SacariaModal";
 import type {
   OperationCargoDetail,
   OperationDetail,
-} from "../mocks/mockOperationDetails";
+} from "../types/operation";
 import { API_BASE_URL } from "../config/apiConfig";
 import { useAuthenticatedFetch } from "../contexts/_AuthContext";
 
@@ -49,17 +49,26 @@ const normalizeDateInput = (value: string): string => {
 
 const StatusChip = ({ status }: { status: string }) => {
   const normalized = status?.toLowerCase?.() ?? "";
-  const isOpen = normalized === "open" || normalized === "aberta" || normalized === "em andamento" || normalized === "in_progress";
-  const isClosed = normalized === "completed" || normalized === "fechada" || normalized === "concluido";
-  
-  const backgroundColor = isClosed
-    ? "rgba(80, 70, 229, 0.12)"
-    : isOpen
-      ? "rgba(73, 197, 182, 0.18)"
-      : "rgba(226, 232, 240, 0.8)";
-  const textColor = isClosed ? "#5046E5" : isOpen ? "#0F766E" : "#6D7380";
+  const isOpen = ["open", "aberto", "em andamento", "in_progress"].includes(normalized);
+  const isPartial = ["partial", "parcial", "partial_load", "partial_loaded", "pending"].includes(normalized);
+  const isClosed = ["completed", "fechado", "fechada", "concluido", "closed", "complete", "completo"].includes(normalized);
 
-  const displayLabel = isClosed ? "Fechada" : isOpen ? "Em andamento" : status || "N/A";
+  const backgroundColor = isClosed
+    ? "rgba(34, 197, 94, 0.14)"
+    : isPartial
+      ? "rgba(250, 204, 21, 0.14)"
+      : isOpen
+        ? "rgba(73, 197, 182, 0.18)"
+        : "rgba(226, 232, 240, 0.8)";
+  const textColor = isClosed
+    ? "#047857"
+    : isPartial
+      ? "#92400E"
+      : isOpen
+        ? "#0F766E"
+        : "#6D7380";
+
+  const displayLabel = isClosed ? "Completo" : isPartial ? "Parcial" : isOpen ? "Aberto" : status || "N/A";
 
   return (
     <View style={[styles.statusChip, { backgroundColor }]}>
@@ -137,6 +146,33 @@ type ApiContainer = {
   status?: string;
 };
 
+const normalizeSackImages = (images?: Array<string | undefined | null>): string[] => {
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+
+  (images ?? []).forEach((uri) => {
+    const trimmed = (uri ?? "").trim();
+    if (!trimmed || seen.has(trimmed)) return;
+    seen.add(trimmed);
+    normalized.push(trimmed);
+  });
+
+  return normalized;
+};
+
+const extractSackImageKey = (url?: string): string | undefined => {
+  if (!url) return undefined;
+  try {
+    const parsed = new URL(url);
+    const segments = parsed.pathname.split("/").filter(Boolean);
+    const lastSegment = segments[segments.length - 1];
+    return lastSegment?.split("?")[0];
+  } catch {
+    const match = url.match(/\/([^/?#]+)(?:\?|#|$)/);
+    return match?.[1];
+  }
+};
+
 const OperationDetails = () => {
   const insets = useSafeAreaInsets();
   const headerPaddingTop = Math.max(insets.top, 12) + 12;
@@ -155,10 +191,12 @@ const OperationDetails = () => {
   const [draftOperationInfo, setDraftOperationInfo] = useState<OperationInfo | undefined>();
   const [containers, setContainers] = useState<ApiContainer[]>([]);
   const [containersLoading, setContainersLoading] = useState<boolean>(false);
+  const [sackImageIdMap, setSackImageIdMap] = useState<Record<string, number>>({});
 
   // Derivados
   const totalContainers = containers.length > 0 ? containers.length : detail?.containers?.length ?? 0;
-  const imageCount = sacariaInfo?.images?.filter((uri) => uri.trim().length > 0).length ?? 0;
+  const sacariaImages = useMemo(() => normalizeSackImages(sacariaInfo?.images), [sacariaInfo?.images]);
+  const imageCount = sacariaImages.length;
   const isOperationClosed = detail?.status?.toUpperCase() === "COMPLETED";
 
   const isLocalUri = (uri: string) =>
@@ -232,25 +270,38 @@ const OperationDetails = () => {
       );
       if (sackResponse.ok) {
         const sackData: ApiSackImage[] = await sackResponse.json();
+        const idMap: Record<string, number> = {};
         const urls = sackData
-          .map((item) => item.imageUrl)
+          .map((item) => {
+            const url = item?.imageUrl || (item as any)?.signedUrl || (item as any)?.url;
+            const trimmed = url?.trim();
+            if (trimmed && item?.id != null) {
+              const numericId = Number(item.id);
+              if (!Number.isNaN(numericId)) {
+                idMap[trimmed] = numericId;
+              }
+            }
+            return trimmed;
+          })
           .filter((u): u is string => !!u && u.length > 0);
         setSacariaInfo({
           title: "Sacaria",
-          description: "Imagens da sacaria desta operação",
-          images: [...urls],
+          description: "Imagens da sacaria desta operacao",
+          images: normalizeSackImages(urls),
           notes: undefined,
         });
+        setSackImageIdMap(idMap);
         return;
       }
 
       if (sackResponse.status === 404) {
         setSacariaInfo({
           title: "Sacaria",
-          description: "Imagens da sacaria desta operação",
+          description: "Imagens da sacaria desta operacao",
           images: [],
           notes: undefined,
         });
+        setSackImageIdMap({});
         return;
       }
     } catch (e) {
@@ -259,10 +310,11 @@ const OperationDetails = () => {
 
     setSacariaInfo({
       title: "Sacaria",
-      description: "Imagens da sacaria desta operação",
+      description: "Imagens da sacaria desta operacao",
       images: [],
       notes: undefined,
     });
+    setSackImageIdMap({});
   };
 
   const fetchContainers = async (id: string) => {
@@ -380,12 +432,52 @@ const OperationDetails = () => {
     }
   };
 
+  const deleteSackImages = async (imagesToDelete: string[]): Promise<boolean> => {
+    if (!operationId || imagesToDelete.length === 0) return true;
+
+    for (const imageUrl of imagesToDelete) {
+      const imageId = sackImageIdMap[imageUrl];
+      if (!imageId) {
+        console.warn(`ID não encontrado para imagem: ${imageUrl}`);
+        continue;
+      }
+
+      try {
+        const response = await authFetch(
+          `${API_BASE_URL}/operations/${operationId}/sack-images/${imageId}`,
+          { method: "DELETE" },
+        );
+
+        if (!response.ok) {
+          console.error(`Erro ao excluir imagem ${imageId}: ${response.status}`);
+          Alert.alert("Erro", "Nao foi possivel excluir uma das imagens da sacaria.");
+          return false;
+        }
+      } catch (error) {
+        console.error("Erro de rede ao excluir imagem de sacaria:", error);
+        Alert.alert("Erro", "Nao foi possivel excluir uma das imagens da sacaria.");
+        return false;
+      }
+    }
+
+    return true;
+  };
+
   const handleSaveSacaria = async (updated: OperationCargoDetail) => {
+    const normalizedImages = normalizeSackImages(updated.images);
+    const removedRemoteImages = sacariaImages.filter((uri) => !normalizedImages.includes(uri));
+
     setSacariaInfo({
       ...updated,
-      images: [...updated.images],
+      images: normalizedImages,
     });
-    const success = await uploadSackImages(updated.images);
+
+    const deleted = await deleteSackImages(
+      removedRemoteImages.filter((uri) => uri && !isLocalUri(uri)),
+    );
+    if (!deleted) return;
+
+    const success = await uploadSackImages(normalizedImages);
     if (success && operationId) {
       setTimeout(async () => {
         await fetchSackImages(operationId);
@@ -627,7 +719,7 @@ const OperationDetails = () => {
                         <StatusChip status={item.status} />
                       </View>
                       {item.weight && (
-                        <Text style={styles.containerWeight}>{item.weight}</Text>
+                        <Text style={styles.containerWeight}>Peso bruto: {item.weight}kg</Text>
                       )}
                     </TouchableOpacity>
                   )}

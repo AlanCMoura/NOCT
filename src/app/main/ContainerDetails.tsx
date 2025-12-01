@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -25,9 +25,8 @@ import {
   type ContainerDetail,
   type ContainerStatus,
   type ContainerPhotoSection,
-  createContainerDetail,
   createEmptyPhotoSections,
-} from "../mocks/mockContainerDetails";
+} from "../types/container";
 import * as ImagePicker from "expo-image-picker";
 import { useAuthenticatedFetch } from "../contexts/_AuthContext";
 import { API_BASE_URL } from "../config/apiConfig";
@@ -48,61 +47,104 @@ const formatDate = (value: string) => {
   return Intl.DateTimeFormat("pt-BR", { dateStyle: "medium" }).format(date);
 };
 
-const STATUS_MAP: Record<ContainerDetail["status"], { label: string; color: string; background: string }> = {
-  "Nao iniciado": {
-    label: "Nao iniciado",
-    color: "#6D7380",
-    background: "rgba(226, 232, 240, 0.8)",
-  },
-  "Em andamento": {
-    label: "Em andamento",
+const STATUS_MAP: Record<ContainerStatus, { label: string; color: string; background: string }> = {
+  Aberto: {
+    label: "Aberto",
     color: "#0F766E",
     background: "rgba(73, 197, 182, 0.18)",
   },
-  Concluido: {
-    label: "Concluido",
-    color: "#5046E5",
-    background: "rgba(80, 70, 229, 0.14)",
+  Parcial: {
+    label: "Parcial",
+    color: "#92400E",
+    background: "rgba(250, 204, 21, 0.14)",
+  },
+  Completo: {
+    label: "Completo",
+    color: "#047857",
+    background: "rgba(34, 197, 94, 0.14)",
   },
 };
 
-const STATUS_OPTIONS: ContainerStatus[] = [
-  "Nao iniciado",
-  "Em andamento",
-  "Concluido",
-];
+const STATUS_OPTIONS: ContainerStatus[] = ["Aberto", "Parcial", "Completo"];
 
+// Mapeamento de status da API para o frontend
 const mapStatusFromApi = (value?: string): ContainerStatus => {
   const upper = (value || "").toUpperCase();
-  if (upper.includes("COMPLE")) return "Concluido";
-  if (upper.includes("PEND") || upper.includes("OPEN") || upper.includes("ANDAMENTO")) return "Em andamento";
-  return "Nao iniciado";
+  if (upper === "COMPLETED" || upper.includes("COMPLET") || upper.includes("FECH")) return "Completo";
+  if (upper === "PENDING" || upper.includes("PEND") || upper.includes("PARC")) return "Parcial";
+  return "Aberto";
 };
 
+// Mapeamento de status do frontend para a API
 const mapStatusToApi = (status: ContainerStatus): string => {
-  if (status === "Concluido") return "COMPLETED";
-  if (status === "Em andamento") return "OPEN";
-  return "PENDING";
+  if (status === "Completo") return "COMPLETED";
+  if (status === "Parcial") return "PENDING";
+  return "OPEN";
 };
 
-const CATEGORY_SECTIONS: Array<{ id: string; title: string; category: string }> = [
-  { id: "empty", title: "Vazio/Forrado", category: "VAZIO_FORRADO" },
-  { id: "partial", title: "Parcial", category: "FIADA" },
-  { id: "full", title: "Cheio/Aberto", category: "CHEIO_ABERTO" },
-  { id: "half-door", title: "Meia Porta", category: "MEIA_PORTA" },
-  { id: "seals", title: "Lacres", category: "LACRES_PRINCIPAIS" },
+type FetchedImage = {
+  url: string;
+  id?: string;
+};
+
+// Mapeamento de categorias de imagem (frontend -> API)
+const CATEGORY_SECTIONS: Array<{
+  id: string;
+  title: string;
+  apiCategory: string;
+  uploadField: string;
+}> = [
+  { id: "empty", title: "Vazio/Forrado", apiCategory: "VAZIO_FORRADO", uploadField: "vazioForrado" },
+  { id: "partial", title: "Fiada", apiCategory: "FIADA", uploadField: "fiada" },
+  { id: "full", title: "Cheio/Aberto", apiCategory: "CHEIO_ABERTO", uploadField: "cheioAberto" },
+  { id: "half-door", title: "Meia Porta", apiCategory: "MEIA_PORTA", uploadField: "meiaPorta" },
+  { id: "closed", title: "Lacrado/Fechado", apiCategory: "LACRADO_FECHADO", uploadField: "lacradoFechado" },
+  { id: "seals", title: "Lacres Principais", apiCategory: "LACRES_PRINCIPAIS", uploadField: "lacresPrincipal" },
+  { id: "other-seals", title: "Outros Lacres", apiCategory: "LACRES_OUTROS", uploadField: "lacresOutros" },
 ];
 
-const buildEmptyContainer = (
-  overrides?: Partial<ContainerDetail>,
-): ContainerDetail => {
+type InfoField = {
+  key: keyof ContainerDetail;
+  label: string;
+  value: string;
+  editable: boolean;
+  onChange?: (value: string) => void;
+  placeholder?: string;
+  keyboardType?: "default" | "numeric";
+};
+
+// Tipo da resposta da API de container
+type ApiContainer = {
+  id?: number;
+  containerId?: string;
+  description?: string;
+  operationId?: number;
+  operation?: { id?: number; ctv?: string };
+  sacksCount?: number;
+  tareTons?: number;
+  liquidWeight?: number;
+  grossWeight?: number;
+  agencySeal?: string;
+  otherSeals?: string[];
+  status?: string;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+// Tipo para imagens com metadados
+type ImageWithMeta = {
+  uri: string;
+  isLocal: boolean; // true = imagem local (file://), false = imagem do S3
+};
+
+const buildEmptyContainer = (overrides?: Partial<ContainerDetail>): ContainerDetail => {
   const base: ContainerDetail = {
     id: "",
     code: "",
     description: "",
     operationCode: "",
     operationName: "",
-    status: "Nao iniciado",
+    status: "Aberto",
     sacariaQuantity: "",
     tare: "",
     netWeight: "",
@@ -119,9 +161,7 @@ const buildEmptyContainer = (
   return {
     ...base,
     ...overrides,
-    photoSections: overrides.photoSections?.length
-      ? overrides.photoSections
-      : base.photoSections,
+    photoSections: overrides.photoSections?.length ? overrides.photoSections : base.photoSections,
   };
 };
 
@@ -131,15 +171,17 @@ const ContainerDetails = () => {
   const idParam = Array.isArray(params.id) ? params.id[0] : params.id;
   const containerId = idParam ? decodeURIComponent(idParam) : undefined;
   const normalizedId = containerId?.toLowerCase();
+
   const decodeParam = (value: string | string[] | undefined) => {
     if (!value) return undefined;
     const single = Array.isArray(value) ? value[0] : value;
     try {
       return decodeURIComponent(single);
-    } catch (error) {
+    } catch {
       return single;
     }
   };
+
   const operationCodeParam = decodeParam(params.operationCode);
   const operationNameParam = decodeParam(params.operationName);
   const isCreateMode =
@@ -147,82 +189,197 @@ const ContainerDetails = () => {
     normalizedId === "novo" ||
     normalizedId === "new" ||
     normalizedId === "create";
+
   const authFetch = useAuthenticatedFetch();
 
+  // Estados principais
   const [currentDetail, setCurrentDetail] = useState<ContainerDetail | undefined>(undefined);
   const [isEditing, setIsEditing] = useState(false);
   const [draftDetail, setDraftDetail] = useState<ContainerDetail | undefined>();
   const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const mapContainerDetail = (api: any, idFallback: string): ContainerDetail => {
-    return {
-      id: api?.containerId || api?.id || idFallback || "",
-      code: api?.containerId || api?.id || idFallback || "",
-      description: api?.description ?? api?.containerDescription ?? "",
-      operationCode: String(api?.operationId ?? api?.operation?.id ?? operationCodeParam ?? ""),
-      operationName: operationNameParam ?? "",
-      status: mapStatusFromApi(api?.status),
-      sacariaQuantity: api?.sacksCount != null ? String(api.sacksCount) : "",
-      tare: api?.tareTons != null ? String(api.tareTons) : "",
-      netWeight: api?.liquidWeight != null ? String(api.liquidWeight) : "",
-      grossWeight: api?.grossWeight != null ? String(api.grossWeight) : "",
-      sealAgency: api?.agencySeal ?? "",
-      otherSeals: Array.isArray(api?.otherSeals) ? api.otherSeals.join(", ") : api?.otherSeals ?? "",
-      pickupDate: "",
-      stuffingDate: "",
-      photoSections: createEmptyPhotoSections(),
-    };
-  };
+  // Estado para rastrear imagens originais (para detectar remoções)
+  const [originalImages, setOriginalImages] = useState<Record<string, string[]>>({});
+  const [imageIdMap, setImageIdMap] = useState<Record<string, Record<string, string>>>({});
 
-  const fetchImagesByCategory = async (id: string, category: string) => {
+  // Mapear resposta da API para ContainerDetail
+  const mapContainerDetail = useCallback(
+    (api: ApiContainer, idFallback: string): ContainerDetail => {
+      return {
+        id: api?.containerId || String(api?.id) || idFallback || "",
+        code: api?.containerId || String(api?.id) || idFallback || "",
+        description: api?.description ?? "",
+        operationCode: String(api?.operationId ?? api?.operation?.id ?? operationCodeParam ?? ""),
+        operationName: api?.operation?.ctv ?? operationNameParam ?? "",
+        status: mapStatusFromApi(api?.status),
+        sacariaQuantity: api?.sacksCount != null ? String(api.sacksCount) : "",
+        tare: api?.tareTons != null ? String(api.tareTons) : "",
+        netWeight: api?.liquidWeight != null ? String(api.liquidWeight) : "",
+        grossWeight: api?.grossWeight != null ? String(api.grossWeight) : "",
+        sealAgency: api?.agencySeal ?? "",
+        otherSeals: Array.isArray(api?.otherSeals) ? api.otherSeals.join(", ") : "",
+        pickupDate: "",
+        stuffingDate: "",
+        photoSections: createEmptyPhotoSections(),
+      };
+    },
+    [operationCodeParam, operationNameParam]
+  );
+
+// Buscar imagens por categoria
+const fetchImagesByCategory = async (
+    id: string,
+    apiCategory: string
+  ): Promise<{ urls: string[]; idMap: Record<string, string> }> => {
     try {
       const response = await authFetch(
-        `${API_BASE_URL}/containers/${id}/images/${category}?expirationMinutes=120`,
+        `${API_BASE_URL}/containers/${encodeURIComponent(id)}/images/${apiCategory}?expirationMinutes=120`
       );
-      if (!response.ok) return [];
+
+      if (!response.ok) {
+        if (response.status === 404) return { urls: [], idMap: {} };
+        console.warn(`Erro ao buscar imagens ${apiCategory}: ${response.status}`);
+        return { urls: [], idMap: {} };
+      }
+
       const data = await response.json();
-      return (data || [])
-        .map((item: any) => item?.imageUrl || item?.signedUrl || item?.url)
-        .filter((u: any) => typeof u === "string" && u.length > 0);
-    } catch {
-      return [];
+
+      const urls: string[] = [];
+      const idMap: Record<string, string> = {};
+
+      if (Array.isArray(data)) {
+        data.forEach((item: any) => {
+          const url =
+            typeof item === "string"
+              ? item
+              : item?.imageUrl || item?.signedUrl || item?.url;
+          const id = item?.id ?? item?.imageId ?? item?.imageKey;
+          if (typeof url === "string" && url.length > 0) {
+            urls.push(url);
+            if (id != null) idMap[url] = String(id);
+          }
+        });
+      }
+
+      return { urls, idMap };
+    } catch (err) {
+      console.warn(`Erro ao buscar imagens ${apiCategory}:`, err);
+      return { urls: [], idMap: {} };
     }
   };
 
-  const fetchContainerDetail = async (id: string) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await authFetch(`${API_BASE_URL}/containers/${id}`);
-      if (!response.ok) {
-        setError(`Erro ${response.status} ao carregar container`);
-        setCurrentDetail(undefined);
-        return;
+  // Excluir imagens removidas
+  const deleteImagesByCategory = async (
+    id: string,
+    _apiCategory: string,
+    payload: { urls: string[]; ids: string[]; urlToId?: Record<string, string> }
+  ): Promise<boolean> => {
+    const { urls, ids, urlToId = {} } = payload;
+    if (urls.length === 0 && ids.length === 0) return true;
+
+    const deleteById = async (imageId: string) => {
+      try {
+        const resp = await authFetch(
+          `${API_BASE_URL}/containers/${encodeURIComponent(id)}/images/${encodeURIComponent(imageId)}`,
+          { method: "DELETE" }
+        );
+        return resp.ok || resp.status === 404;
+      } catch (err) {
+        console.warn(`Erro ao excluir imagem ${imageId}:`, err);
+        return false;
       }
-      const apiData = await response.json();
-      const mapped = mapContainerDetail(apiData, id);
+    };
 
-      const photos = await Promise.all(
-        CATEGORY_SECTIONS.map(async (section) => {
-          const images = await fetchImagesByCategory(id, section.category);
-          return { ...section, images };
-        }),
-      );
+    // Prioriza IDs; se não houver, tenta pela URL (caso o backend aceite imageUrl como query)
+    const deleteByUrl = async (url: string) => {
+      try {
+        const resp = await authFetch(
+          `${API_BASE_URL}/containers/${encodeURIComponent(id)}/images?imageUrl=${encodeURIComponent(url)}`,
+          { method: "DELETE" }
+        );
+        return resp.ok || resp.status === 404;
+      } catch (err) {
+        console.warn(`Erro ao excluir imagem por URL:`, err);
+        return false;
+      }
+    };
 
-      const sections: ContainerPhotoSection[] = CATEGORY_SECTIONS.map((section) => {
-        const found = photos.find((p) => p.id === section.id);
+    const results: boolean[] = [];
+
+    if (ids.length > 0) {
+      const idResults = await Promise.all(ids.map((imageId) => deleteById(imageId)));
+      results.push(...idResults);
+    }
+
+    const urlsWithoutId = urls.filter((url) => !urlToId[url]);
+    if (urlsWithoutId.length > 0) {
+      const urlResults = await Promise.all(urlsWithoutId.map((url) => deleteByUrl(url)));
+      results.push(...urlResults);
+    }
+
+    return results.every(Boolean);
+  };
+
+  // Buscar todas as imagens do container
+  const fetchAllImages = async (id: string): Promise<ContainerPhotoSection[]> => {
+    const idMapAccumulator: Record<string, Record<string, string>> = {};
+
+    const sectionsWithImages = await Promise.all(
+      CATEGORY_SECTIONS.map(async (section) => {
+        const { urls, idMap } = await fetchImagesByCategory(id, section.apiCategory);
+        idMapAccumulator[section.id] = idMap;
         return {
           id: section.id,
           title: section.title,
-          images: found?.images ?? [],
+          images: urls,
         };
-      });
+      })
+    );
 
-      setCurrentDetail({ ...mapped, photoSections: sections });
+    const originals: Record<string, string[]> = {};
+    sectionsWithImages.forEach((section) => {
+      originals[section.id] = [...section.images];
+    });
+    setOriginalImages(originals);
+    setImageIdMap(idMapAccumulator);
+
+    return sectionsWithImages;
+  };
+
+  // Buscar detalhes do container
+  const fetchContainerDetail = async (id: string) => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response = await authFetch(`${API_BASE_URL}/containers/${encodeURIComponent(id)}`);
+
+      if (!response.ok) {
+        if (response.status === 404) {
+          setError("Container não encontrado");
+        } else {
+          setError(`Erro ${response.status} ao carregar container`);
+        }
+        setCurrentDetail(undefined);
+        return;
+      }
+
+      const apiData: ApiContainer = await response.json();
+      console.log("📥 Dados do container recebidos:", apiData);
+
+      const mapped = mapContainerDetail(apiData, id);
+
+      // Buscar imagens de todas as categorias
+      const photoSections = await fetchAllImages(id);
+
+      setCurrentDetail({ ...mapped, photoSections });
       setIsEditing(false);
       setDraftDetail(undefined);
     } catch (err) {
+      console.error("Erro ao buscar container:", err);
       setError("Não foi possível carregar o container.");
       setCurrentDetail(undefined);
     } finally {
@@ -230,58 +387,52 @@ const ContainerDetails = () => {
     }
   };
 
+  // Efeito para carregar dados
   useEffect(() => {
     if (!containerId || isCreateMode) return;
     fetchContainerDetail(containerId);
-  }, [containerId, isCreateMode, operationCodeParam, operationNameParam]);
+  }, [containerId, isCreateMode]);
 
+  // Valores derivados
   const baseDetail = currentDetail;
   const displayDetail = isEditing && draftDetail ? draftDetail : baseDetail;
-  const isDetailInProgress = displayDetail?.status === "Em andamento";
-  const safeStatus = displayDetail?.status ?? "Nao iniciado";
-  const statusInfo = STATUS_MAP[safeStatus] ?? STATUS_MAP["Nao iniciado"];
+  const safeStatus = displayDetail?.status ?? "Aberto";
+  const statusInfo = STATUS_MAP[safeStatus] ?? STATUS_MAP["Aberto"];
+  const isContainerCompleted = displayDetail?.status === "Completo";
 
-  const handleToggleProgress = () => {
-    if (!displayDetail) return;
-    const nextStatus: ContainerStatus =
-      displayDetail.status === "Em andamento" ? "Nao iniciado" : "Em andamento";
-    if (isEditing && draftDetail) {
-      setDraftDetail({ ...draftDetail, status: nextStatus });
-      return;
-    }
-    if (!baseDetail) return;
-    setCurrentDetail({ ...displayDetail, status: nextStatus });
+  // Handlers de edição
+  const handleCompleteToggle = (value: boolean) => {
+    if (!value || isContainerCompleted || saving) return;
+    handleCompleteContainer();
   };
 
   const handleEditPress = () => {
-    if (!baseDetail) return;
+    if (!baseDetail || isContainerCompleted) return;
     setDraftDetail({ ...baseDetail });
     setIsEditing(true);
   };
 
-  const updateDraft = <K extends keyof ContainerDetail>(
-    key: K,
-    value: ContainerDetail[K],
-  ) => {
+  const updateDraft = <K extends keyof ContainerDetail>(key: K, value: ContainerDetail[K]) => {
     setDraftDetail((prev) => (prev ? { ...prev, [key]: value } : prev));
   };
 
   const updatePhotoSection = (
     sectionId: string,
-    updater: (section: ContainerPhotoSection) => ContainerPhotoSection,
+    updater: (section: ContainerPhotoSection) => ContainerPhotoSection
   ) => {
     setDraftDetail((prev) =>
       prev
         ? {
             ...prev,
             photoSections: prev.photoSections.map((section) =>
-              section.id === sectionId ? updater(section) : section,
+              section.id === sectionId ? updater(section) : section
             ),
           }
-        : prev,
+        : prev
     );
   };
 
+  // Remover imagem
   const handleRemoveImage = (sectionId: string, index: number) => {
     if (!isEditing) return;
     updatePhotoSection(sectionId, (section) => ({
@@ -290,7 +441,8 @@ const ContainerDetails = () => {
     }));
   };
 
-  const pickImage = async (source: "library" | "camera") => {
+  // Selecionar imagem
+  const pickImage = async (source: "library" | "camera"): Promise<string | undefined> => {
     try {
       const permission =
         source === "library"
@@ -299,10 +451,10 @@ const ContainerDetails = () => {
 
       if (permission.status !== "granted") {
         Alert.alert(
-          "Permissao necessaria",
+          "Permissão necessária",
           source === "library"
-            ? "Precisamos de acesso a sua galeria para anexar imagens."
-            : "Precisamos de acesso a camera para registrar novas imagens.",
+            ? "Precisamos de acesso à sua galeria para anexar imagens."
+            : "Precisamos de acesso à câmera para registrar novas imagens."
         );
         return undefined;
       }
@@ -321,43 +473,39 @@ const ContainerDetails = () => {
             });
 
       if (!pickerResult.canceled && pickerResult.assets?.length) {
-        const uri = pickerResult.assets[0]?.uri;
-        return uri ?? undefined;
+        return pickerResult.assets[0]?.uri;
       }
-    } catch (error) {
-      Alert.alert(
-        "Erro ao anexar",
-        "Nao foi possivel captar a imagem. Tente novamente.",
-      );
+    } catch (err) {
+      console.error("Erro ao selecionar imagem:", err);
+      Alert.alert("Erro ao anexar", "Não foi possível captar a imagem. Tente novamente.");
     }
     return undefined;
   };
 
+  // Anexar imagem a uma seção
   const handleAttachImage = async (sectionId: string, source: "library" | "camera") => {
     if (!isEditing || !draftDetail) return;
     const uri = await pickImage(source);
     if (!uri) return;
+
     updatePhotoSection(sectionId, (section) => ({
       ...section,
       images: [...section.images, uri],
     }));
   };
 
-  const promptImageSource = (
-    message: string,
-    onSelect: (source: "library" | "camera") => void,
-  ) => {
+  // Prompt para escolher origem da imagem
+  const promptImageSource = (message: string, onSelect: (source: "library" | "camera") => void) => {
     Alert.alert(message, "Selecione a origem da imagem", [
       { text: "Cancelar", style: "cancel" },
       { text: "Galeria", onPress: () => onSelect("library") },
-      { text: "Camera", onPress: () => onSelect("camera") },
+      { text: "Câmera", onPress: () => onSelect("camera") },
     ]);
   };
 
+  // Cancelar edição
   const handleEditCancel = () => {
     if (isCreateMode) {
-      setDraftDetail(buildEmptyContainer());
-      setIsEditing(true);
       router.back();
       return;
     }
@@ -365,176 +513,252 @@ const ContainerDetails = () => {
     setIsEditing(false);
   };
 
-  const sanitizeDetail = (detailToSanitize: ContainerDetail): ContainerDetail => {
-    const sanitizeText = (text?: string) => (text ?? "").trim();
-    const sanitizedSections = (detailToSanitize.photoSections ?? []).map(
-      (section) => {
-        const sanitizedTitle = sanitizeText(section.title) || section.title;
-        const sanitizedImages = (section.images ?? [])
-          .map((image) => image.trim())
-          .filter(
-            (image, idx, arr) => image.length > 0 && arr.indexOf(image) === idx,
-          );
-        return {
-          ...section,
-          title: sanitizedTitle,
-          images: sanitizedImages,
-        };
-      },
-    );
-
-    return {
-      ...detailToSanitize,
-      id: sanitizeText(detailToSanitize.id),
-      code: sanitizeText(detailToSanitize.code),
-      operationCode: sanitizeText(detailToSanitize.operationCode),
-      operationName: sanitizeText(detailToSanitize.operationName),
-      sacariaQuantity: sanitizeText(detailToSanitize.sacariaQuantity),
-      tare: sanitizeText(detailToSanitize.tare),
-      netWeight: sanitizeText(detailToSanitize.netWeight),
-      grossWeight: sanitizeText(detailToSanitize.grossWeight),
-      sealAgency: sanitizeText(detailToSanitize.sealAgency),
-      otherSeals: sanitizeText(detailToSanitize.otherSeals),
-      pickupDate: sanitizeText(detailToSanitize.pickupDate),
-      stuffingDate: sanitizeText(detailToSanitize.stuffingDate),
-      photoSections: sanitizedSections,
-    };
+  // Verificar se é URI local
+  const isLocalUri = (uri: string): boolean => {
+    return uri.startsWith("file://") || uri.startsWith("content://");
   };
 
+  // Salvar edição
   const handleEditSave = async () => {
-    if (!draftDetail || !containerId) return;
-    const sanitized = sanitizeDetail(draftDetail);
-    const normalized: ContainerDetail = {
-      ...sanitized,
-      id: sanitized.id || baseDetail?.id || "",
-      code: sanitized.code || sanitized.id || baseDetail?.code || "",
-      status: sanitized.status ?? "Nao iniciado",
-      photoSections: sanitized.photoSections.length
-        ? sanitized.photoSections
-        : createEmptyPhotoSections(),
-    };
+    if (!draftDetail || !containerId || saving) return;
 
-    const payload = {
-      description: normalized.description ?? "",
-      sacksCount: Number(normalized.sacariaQuantity) || 0,
-      tareTons: Number(normalized.tare) || 0,
-      liquidWeight: Number(normalized.netWeight) || 0,
-      grossWeight: Number(normalized.grossWeight) || 0,
-      agencySeal: normalized.sealAgency ?? "",
-      otherSeals:
-        normalized.otherSeals
-          ?.split(",")
-          .map((s) => s.trim())
-          .filter((s) => s.length > 0) ?? [],
-      status: mapStatusToApi(normalized.status ?? "Nao iniciado"),
-    };
+    setSaving(true);
 
     try {
-      const response = await authFetch(`${API_BASE_URL}/containers/${containerId}`, {
-        method: "PUT",
-        body: JSON.stringify(payload),
-      });
+      // Diferença entre imagens originais (API) e atuais (salvar)
+      const removedImagesByCategory = draftDetail.photoSections.reduce<
+        Record<string, { urls: string[]; ids: string[]; urlToId: Record<string, string> }>
+      >(
+        (acc, section) => {
+          const sectionConfig = CATEGORY_SECTIONS.find((c) => c.id === section.id);
+          if (!sectionConfig) return acc;
 
-      if (!response.ok) {
-        const msg = await response.text();
-        Alert.alert("Erro", `Não foi possível salvar o container. ${msg}`);
+          const original = originalImages[section.id] ?? [];
+          const currentRemote = section.images.filter((uri) => !isLocalUri(uri));
+          const removed = original.filter((url) => !currentRemote.includes(url));
+          if (removed.length) {
+            const idMap = imageIdMap[section.id] ?? {};
+            const ids = removed
+              .map((url) => idMap[url])
+              .filter((id): id is string => typeof id === "string" && id.length > 0);
+            acc[sectionConfig.apiCategory] = { urls: removed, ids, urlToId: idMap };
+          }
+          return acc;
+        },
+        {}
+      );
+
+      // 1. Atualizar dados do container
+      const payload = {
+        description: draftDetail.description?.trim() ?? "",
+        sacksCount: Number(draftDetail.sacariaQuantity) || 0,
+        tareTons: Number(draftDetail.tare) || 0,
+        liquidWeight: Number(draftDetail.netWeight) || 0,
+        grossWeight: Number(draftDetail.grossWeight) || 0,
+        agencySeal: draftDetail.sealAgency?.trim() ?? "",
+        otherSeals:
+          draftDetail.otherSeals
+            ?.split(",")
+            .map((s) => s.trim())
+            .filter((s) => s.length > 0) ?? [],
+        status: mapStatusToApi(draftDetail.status ?? "Aberto"),
+      };
+
+      console.log("📤 Atualizando container:", payload);
+
+      const updateResponse = await authFetch(
+        `${API_BASE_URL}/containers/${encodeURIComponent(containerId)}`,
+        {
+          method: "PUT",
+          body: JSON.stringify(payload),
+        }
+      );
+
+      if (!updateResponse.ok) {
+        const errorText = await updateResponse.text();
+        console.error("Erro ao atualizar container:", errorText);
+        Alert.alert("Erro", `Não foi possível salvar o container. ${errorText}`);
         return;
       }
 
+      // 2. Remover imagens apagadas
+      const deletionResults = await Promise.all(
+        Object.entries(removedImagesByCategory).map(([apiCategory, images]) =>
+          deleteImagesByCategory(containerId, apiCategory, images)
+        )
+      );
+
+      if (deletionResults.some((ok) => !ok)) {
+        Alert.alert("Aviso", "Algumas imagens não puderam ser excluídas. Tente novamente.");
+      }
+
+      // 2. Upload de novas imagens (locais)
       const form = new FormData();
-      const appendImages = (field: string, images: string[]) => {
-        images
-          .filter((uri) => uri.startsWith("file://") || uri.startsWith("content://"))
-          .forEach((uri, idx) => {
-            const name = `${field}-${idx}.jpg`;
-            form.append(field, {
-              uri,
-              name,
-              type: "image/jpeg",
-            } as any);
-          });
-      };
+      let hasNewImages = false;
 
-      const sectionMap: Record<string, string> = {
-        empty: "vazioForrado",
-        partial: "fiada",
-        full: "cheioAberto",
-        "half-door": "meiaPorta",
-        seals: "lacresPrincipal",
-      };
+      draftDetail.photoSections.forEach((section) => {
+        const sectionConfig = CATEGORY_SECTIONS.find((c) => c.id === section.id);
+        if (!sectionConfig) return;
 
-      normalized.photoSections.forEach((section) => {
-        const field = sectionMap[section.id];
-        if (field) {
-          appendImages(field, section.images);
-        }
+        const localImages = section.images.filter((uri) => isLocalUri(uri));
+
+        localImages.forEach((uri, idx) => {
+          const filename = `${sectionConfig.uploadField}_${idx}_${Date.now()}.jpg`;
+          form.append(sectionConfig.uploadField, {
+            uri,
+            name: filename,
+            type: "image/jpeg",
+          } as any);
+          hasNewImages = true;
+        });
       });
 
-      let uploaded = false;
-      // @ts-ignore FormData parts
-      if ((form as any)._parts?.length) {
-        try {
-          const uploadResp = await authFetch(
-            `${API_BASE_URL}/containers/${containerId}/images`,
-            {
-              method: "POST",
-              body: form,
-            },
-          );
-          if (uploadResp.ok) {
-            uploaded = true;
-          } else {
-            const msg = await uploadResp.text();
-            console.warn("Falha ao enviar imagens:", msg);
+      if (hasNewImages) {
+        console.log("📤 Enviando novas imagens...");
+
+        const uploadResponse = await authFetch(
+          `${API_BASE_URL}/containers/${encodeURIComponent(containerId)}/images`,
+          {
+            method: "POST",
+            body: form,
           }
-        } catch (e) {
-          console.warn("Erro ao enviar imagens:", e);
+        );
+
+        if (!uploadResponse.ok) {
+          const errorText = await uploadResponse.text();
+          console.warn("Aviso: Falha ao enviar algumas imagens:", errorText);
+          // Não interrompe o fluxo, apenas avisa
+        } else {
+          console.log("✅ Imagens enviadas com sucesso");
         }
       }
 
+      // 3. Recarregar dados atualizados
       await fetchContainerDetail(containerId);
-      setDraftDetail(undefined);
-      setIsEditing(false);
-      Alert.alert("Sucesso", uploaded ? "Container e imagens atualizados." : "Container atualizado.");
-    } catch (e) {
+
+      Alert.alert("Sucesso", hasNewImages ? "Container e imagens atualizados." : "Container atualizado.");
+    } catch (err) {
+      console.error("Erro ao salvar container:", err);
       Alert.alert("Erro", "Não foi possível salvar o container.");
+    } finally {
+      setSaving(false);
     }
   };
 
+  // Excluir container
   const handleDeletePress = () => {
-    if (isCreateMode || !displayDetail) return;
+    if (isCreateMode || !displayDetail || !containerId) return;
+
     Alert.alert(
       "Excluir container",
-      "Esta acao nao pode ser desfeita. Deseja continuar?",
+      `Tem certeza que deseja excluir o container "${displayDetail.code}"?\n\nEsta ação não pode ser desfeita.`,
       [
         { text: "Cancelar", style: "cancel" },
-        { text: "Excluir", style: "destructive" },
-      ],
+        {
+          text: "Excluir",
+          style: "destructive",
+          onPress: handleConfirmDelete,
+        },
+      ]
     );
   };
 
+  const handleConfirmDelete = async () => {
+    if (!containerId || deleting) return;
+
+    setDeleting(true);
+
+    try {
+      console.log("🗑️ Excluindo container:", containerId);
+
+      const response = await authFetch(
+        `${API_BASE_URL}/containers/${encodeURIComponent(containerId)}`,
+        { method: "DELETE" }
+      );
+
+      if (!response.ok && response.status !== 204) {
+        const errorText = await response.text();
+        console.error("Erro ao excluir container:", errorText);
+        Alert.alert("Erro", "Não foi possível excluir o container.");
+        return;
+      }
+
+      console.log("✅ Container excluído com sucesso");
+      Alert.alert("Sucesso", "Container excluído com sucesso.", [
+        { text: "OK", onPress: () => router.back() },
+      ]);
+    } catch (err) {
+      console.error("Erro ao excluir container:", err);
+      Alert.alert("Erro", "Não foi possível excluir o container.");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  // Finalizar container (mudar status para COMPLETED)
+  const handleCompleteContainer = () => {
+    if (!containerId || isContainerCompleted) return;
+
+    Alert.alert(
+      "Finalizar container",
+      "Tem certeza que deseja finalizar este container?\n\nApós finalizado, não será possível editar.",
+      [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "Finalizar",
+          onPress: handleConfirmComplete,
+        },
+      ]
+    );
+  };
+
+  const handleConfirmComplete = async () => {
+    if (!containerId || saving) return;
+
+    setSaving(true);
+
+    try {
+      console.log("✅ Finalizando container:", containerId);
+
+      const response = await authFetch(
+        `${API_BASE_URL}/containers/${encodeURIComponent(containerId)}/status`,
+        { method: "PATCH" }
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("Erro ao finalizar container:", errorText);
+        Alert.alert("Erro", `Não foi possível finalizar o container.\n${errorText}`);
+        return;
+      }
+
+      await fetchContainerDetail(containerId);
+      Alert.alert("Sucesso", "Container finalizado com sucesso.");
+    } catch (err) {
+      console.error("Erro ao finalizar container:", err);
+      Alert.alert("Erro", "Não foi possível finalizar o container.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Renderização de estados de loading/erro
   if (!displayDetail) {
     if (isCreateMode) {
       return (
         <SafeAreaView className="flex-1" style={{ backgroundColor: "#F6F8FB" }}>
-          <CustomStatusBar
-            backgroundColor="#F6F8FB"
-            barStyle="dark-content"
-            translucent
-          />
+          <CustomStatusBar backgroundColor="#F6F8FB" barStyle="dark-content" translucent />
           <View className="flex-1 items-center justify-center px-6">
-            <Text style={styles.missingTitle}>Preparando criacao do container</Text>
+            <ActivityIndicator size="large" color="#49C5B6" />
+            <Text style={{ marginTop: 12, color: "#2A2E40" }}>Preparando criação do container...</Text>
           </View>
         </SafeAreaView>
       );
     }
+
     return (
       <SafeAreaView className="flex-1" style={{ backgroundColor: "#F6F8FB" }}>
-        <CustomStatusBar
-          backgroundColor="#F6F8FB"
-          barStyle="dark-content"
-          translucent
-        />
+        <CustomStatusBar backgroundColor="#F6F8FB" barStyle="dark-content" translucent />
         <View className="flex-1 items-center justify-center px-6">
           {loading ? (
             <>
@@ -543,14 +767,14 @@ const ContainerDetails = () => {
             </>
           ) : (
             <>
-              <Text style={styles.missingTitle}>{error || "Container nao encontrado"}</Text>
-              <Text style={[styles.missingSubtitle, { textAlign: "center" }]}>
-                Verifique se o identificador informado esta correto ou selecione outro container.
+              <Text style={styles.missingTitle}>{error || "Container não encontrado"}</Text>
+              <Text style={[styles.missingSubtitle, { textAlign: "center", marginTop: 8 }]}>
+                Verifique se o identificador informado está correto ou selecione outro container.
               </Text>
             </>
           )}
           <TouchableOpacity
-            style={[styles.actionButton, styles.cancelButton, { marginTop: 16 }]}
+            style={[styles.actionButton, styles.cancelButton, { marginTop: 24 }]}
             onPress={() => router.back()}
           >
             <Text style={[styles.actionButtonLabel, styles.cancelButtonText]}>Voltar</Text>
@@ -560,100 +784,92 @@ const ContainerDetails = () => {
     );
   }
 
-const infoFields = [
-  {
-    key: "code",
-    label: "Identificação",
-    value: isEditing ? draftDetail?.code ?? "" : displayDetail.code ?? "-",
-    editable: isEditing,
-    onChange: isEditing ? (value: string) => updateDraft("code", value) : undefined,
-    placeholder: "Identificador",
-  },
-  {
-    key: "description",
-    label: "Descrição",
-    value: isEditing ? draftDetail?.description ?? "" : displayDetail.description ?? "-",
-    editable: isEditing,
-    onChange: isEditing ? (value: string) => updateDraft("description", value) : undefined,
-    placeholder: "Descrição do container",
-  },
-  {
-    key: "sacariaQuantity",
-    label: "Quantidade de Sacas",
-    value: isEditing
-      ? draftDetail?.sacariaQuantity ?? ""
-      : displayDetail.sacariaQuantity ?? "-",
-    editable: isEditing,
-    onChange: isEditing
-      ? (value: string) => updateDraft("sacariaQuantity", value)
-      : undefined,
-    placeholder: "Ex: 300",
-  },
-  {
-    key: "tare",
-    label: "Tara (kg)",
-    value: isEditing ? draftDetail?.tare ?? "" : displayDetail.tare ?? "-",
-    editable: isEditing,
-    onChange: isEditing ? (value: string) => updateDraft("tare", value) : undefined,
-    placeholder: "Ex: 2500",
-  },
-  {
-    key: "netWeight",
-    label: "Peso Líquido (kg)",
-    value: isEditing ? draftDetail?.netWeight ?? "" : displayDetail.netWeight ?? "-",
-    editable: isEditing,
-    onChange: isEditing ? (value: string) => updateDraft("netWeight", value) : undefined,
-    placeholder: "Ex: 25000",
-  },
-  {
-    key: "grossWeight",
-    label: "Peso Bruto (kg)",
-    value: isEditing ? draftDetail?.grossWeight ?? "" : displayDetail.grossWeight ?? "-",
-    editable: isEditing,
-    onChange: isEditing ? (value: string) => updateDraft("grossWeight", value) : undefined,
-    placeholder: "Ex: 27500",
-  },
-  {
-    key: "sealAgency",
-    label: "Lacre Principal (agência)",
-    value: isEditing ? draftDetail?.sealAgency ?? "" : displayDetail.sealAgency ?? "-",
-    editable: isEditing,
-    onChange: isEditing ? (value: string) => updateDraft("sealAgency", value) : undefined,
-    placeholder: "Código do lacre",
-  },
-  {
-    key: "otherSeals",
-    label: "Outros Lacres",
-    value: isEditing ? draftDetail?.otherSeals ?? "" : displayDetail.otherSeals ?? "-",
-    editable: isEditing,
-    onChange: isEditing ? (value: string) => updateDraft("otherSeals", value) : undefined,
-    placeholder: "Ex: LAC1002, LAC1003",
-  },
-];
+  // Campos de informação
+  const infoFields: InfoField[] = [
+    {
+      key: "code",
+      label: "Identificação",
+      value: isEditing ? draftDetail?.code ?? "" : displayDetail.code ?? "-",
+      editable: false, // ID não é editável
+      placeholder: "Identificador",
+    },
+    {
+      key: "description",
+      label: "Descrição",
+      value: isEditing ? draftDetail?.description ?? "" : displayDetail.description ?? "-",
+      editable: isEditing,
+      onChange: isEditing ? (value: string) => updateDraft("description", value) : undefined,
+      placeholder: "Descrição do container",
+    },
+    {
+      key: "sacariaQuantity",
+      label: "Quantidade de Sacas",
+      value: isEditing ? draftDetail?.sacariaQuantity ?? "" : displayDetail.sacariaQuantity ?? "-",
+      editable: isEditing,
+      onChange: isEditing ? (value: string) => updateDraft("sacariaQuantity", value) : undefined,
+      placeholder: "Ex: 300",
+      keyboardType: "numeric",
+    },
+    {
+      key: "tare",
+      label: "Tara (ton)",
+      value: isEditing ? draftDetail?.tare ?? "" : displayDetail.tare ?? "-",
+      editable: isEditing,
+      onChange: isEditing ? (value: string) => updateDraft("tare", value) : undefined,
+      placeholder: "Ex: 2.5",
+      keyboardType: "numeric",
+    },
+    {
+      key: "netWeight",
+      label: "Peso Líquido (ton)",
+      value: isEditing ? draftDetail?.netWeight ?? "" : displayDetail.netWeight ?? "-",
+      editable: isEditing,
+      onChange: isEditing ? (value: string) => updateDraft("netWeight", value) : undefined,
+      placeholder: "Ex: 25.0",
+      keyboardType: "numeric",
+    },
+    {
+      key: "grossWeight",
+      label: "Peso Bruto (ton)",
+      value: isEditing ? draftDetail?.grossWeight ?? "" : displayDetail.grossWeight ?? "-",
+      editable: isEditing,
+      onChange: isEditing ? (value: string) => updateDraft("grossWeight", value) : undefined,
+      placeholder: "Ex: 27.5",
+      keyboardType: "numeric",
+    },
+    {
+      key: "sealAgency",
+      label: "Lacre Principal (agência)",
+      value: isEditing ? draftDetail?.sealAgency ?? "" : displayDetail.sealAgency ?? "-",
+      editable: isEditing,
+      onChange: isEditing ? (value: string) => updateDraft("sealAgency", value) : undefined,
+      placeholder: "Código do lacre",
+    },
+    {
+      key: "otherSeals",
+      label: "Outros Lacres",
+      value: isEditing ? draftDetail?.otherSeals ?? "" : displayDetail.otherSeals ?? "-",
+      editable: isEditing,
+      onChange: isEditing ? (value: string) => updateDraft("otherSeals", value) : undefined,
+      placeholder: "Ex: LAC1002, LAC1003",
+    },
+  ];
 
-const leftColumnKeys = ["code", "tare", "sealAgency", "otherSeals"];
-
-const columns = [
-  infoFields.filter((field) => leftColumnKeys.includes(field.key)),
-  infoFields.filter((field) => !leftColumnKeys.includes(field.key)),
-];
+  const leftColumnKeys: Array<InfoField["key"]> = ["code", "tare", "sealAgency", "otherSeals"];
+  const columns = [
+    infoFields.filter((field) => leftColumnKeys.includes(field.key)),
+    infoFields.filter((field) => !leftColumnKeys.includes(field.key)),
+  ];
 
   const headerPaddingTop = Math.max(insets.top, 12) + 12;
-
-  const slideWidth = Math.max(
-    (SCREEN_WIDTH - CAROUSEL_ITEM_SPACING) / 1.5,
-    220,
-  );
+  const slideWidth = Math.max((SCREEN_WIDTH - CAROUSEL_ITEM_SPACING) / 1.5, 220);
   const snapInterval = slideWidth + CAROUSEL_ITEM_SPACING;
 
   return (
     <SafeAreaView className="flex-1" style={{ backgroundColor: "#F6F8FB" }}>
-      <CustomStatusBar
-        backgroundColor="#F6F8FB"
-        barStyle="dark-content"
-        translucent
-      />
+      <CustomStatusBar backgroundColor="#F6F8FB" barStyle="dark-content" translucent />
       <View className="flex-1">
+        {/* Header */}
         <View
           className="w-full px-6 pb-4"
           style={[styles.headerContainer, { paddingTop: headerPaddingTop }]}
@@ -681,116 +897,115 @@ const columns = [
                   {displayDetail?.code || "Container"}
                 </Text>
                 <Text style={styles.subtitle} numberOfLines={1}>
-                  Operacao {displayDetail?.operationCode || "-"}
+                  Operação {displayDetail?.operationCode || "-"}
                 </Text>
               </View>
             </View>
-            <View
-              style={[
-                styles.statusChip,
-                { backgroundColor: statusInfo.background },
-              ]}
-            >
-              <Text
-                style={[
-                  styles.statusChipText,
-                  { color: statusInfo.color },
-                ]}
-              >
+            <View style={[styles.statusChip, { backgroundColor: statusInfo.background }]}>
+              <Text style={[styles.statusChipText, { color: statusInfo.color }]}>
                 {statusInfo.label}
               </Text>
             </View>
           </View>
+
+          {/* Botões de ação */}
           <View style={styles.headerActions}>
             {isEditing ? (
               <>
                 <TouchableOpacity
-                  style={[styles.actionButton, styles.cancelButton]}
+                  style={[styles.actionButton, styles.cancelButton, saving && styles.buttonDisabled]}
                   onPress={handleEditCancel}
                   activeOpacity={0.8}
+                  disabled={saving}
                 >
-                  <Text
-                    style={[styles.actionButtonLabel, styles.cancelButtonText]}
-                  >
-                    Cancelar
-                  </Text>
+                  <Text style={[styles.actionButtonLabel, styles.cancelButtonText]}>Cancelar</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={[styles.actionButton, styles.editButton]}
+                  style={[styles.actionButton, styles.editButton, saving && styles.buttonDisabled]}
                   onPress={handleEditSave}
                   activeOpacity={0.85}
+                  disabled={saving}
                 >
-                  <Text style={[styles.actionButtonLabel, styles.editButtonText]}>
-                    Salvar
-                  </Text>
+                  {saving ? (
+                    <View style={styles.savingRow}>
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                      <Text style={[styles.actionButtonLabel, styles.editButtonText, { marginLeft: 8 }]}>
+                        Salvando...
+                      </Text>
+                    </View>
+                  ) : (
+                    <Text style={[styles.actionButtonLabel, styles.editButtonText]}>Salvar</Text>
+                  )}
                 </TouchableOpacity>
               </>
             ) : (
               <>
+                {!isContainerCompleted && (
+                  <TouchableOpacity
+                    style={[styles.actionButton, styles.editButton]}
+                    onPress={handleEditPress}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[styles.actionButtonLabel, styles.editButtonText]}>Editar</Text>
+                  </TouchableOpacity>
+                )}
                 <TouchableOpacity
-                  style={[styles.actionButton, styles.editButton]}
-                  onPress={handleEditPress}
-                  activeOpacity={0.8}
-                >
-                  <Text style={[styles.actionButtonLabel, styles.editButtonText]}>
-                    Editar
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.actionButton, styles.deleteButton]}
+                  style={[styles.actionButton, styles.deleteButton, deleting && styles.buttonDisabled]}
                   onPress={handleDeletePress}
                   activeOpacity={0.8}
+                  disabled={deleting}
                 >
-                  <Text
-                    style={[styles.actionButtonLabel, styles.deleteButtonText]}
-                  >
-                    Excluir
-                  </Text>
+                  {deleting ? (
+                    <ActivityIndicator size="small" color="#B91C1C" />
+                  ) : (
+                    <Text style={[styles.actionButtonLabel, styles.deleteButtonText]}>Excluir</Text>
+                  )}
                 </TouchableOpacity>
               </>
             )}
           </View>
         </View>
 
+        {/* Conteúdo */}
         <ScrollView
           className="flex-1"
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.contentContainer}
         >
+          {/* Card de dados do container */}
           <View style={styles.card}>
             <View style={styles.cardHeader}>
               <Text style={styles.cardTitle}>Dados do Container</Text>
-              <View style={styles.switchWrapper}>
-                <Switch
-                  trackColor={{ false: "#CBD5E1", true: "#49C5B6" }}
-                  thumbColor="#FFFFFF"
-                  value={!!isDetailInProgress}
-                  onValueChange={handleToggleProgress}
-                />
-                <Text style={styles.switchLabel}>Em andamento</Text>
-              </View>
+              {!isEditing && (
+                <View style={styles.switchWrapper}>
+                  <Switch
+                    trackColor={{ false: "#CBD5E1", true: "#49C5B6" }}
+                    thumbColor="#FFFFFF"
+                    value={!!isContainerCompleted}
+                    onValueChange={handleCompleteToggle}
+                    disabled={isContainerCompleted || saving}
+                  />
+                  <Text style={styles.switchLabel}>Completo</Text>
+                </View>
+              )}
             </View>
+
+            {/* Seletor de status (modo edição) */}
             {isEditing && (
               <View style={styles.statusEditor}>
                 <Text style={styles.editLabel}>Status do container</Text>
                 <View style={styles.statusOptions}>
                   {STATUS_OPTIONS.map((status) => {
-                    const isActive = displayDetail.status === status;
+                    const isActive = draftDetail?.status === status;
                     return (
                       <TouchableOpacity
                         key={status}
-                        style={[
-                          styles.statusOption,
-                          isActive && styles.statusOptionActive,
-                        ]}
+                        style={[styles.statusOption, isActive && styles.statusOptionActive]}
                         onPress={() => updateDraft("status", status)}
                         activeOpacity={0.85}
                       >
                         <Text
-                          style={[
-                            styles.statusOptionText,
-                            isActive && styles.statusOptionTextActive,
-                          ]}
+                          style={[styles.statusOptionText, isActive && styles.statusOptionTextActive]}
                         >
                           {STATUS_MAP[status].label}
                         </Text>
@@ -800,31 +1015,29 @@ const columns = [
                 </View>
               </View>
             )}
+
+            {/* Grid de informações */}
             <View style={styles.infoGrid}>
               {columns.map((columnFields, columnIndex) => (
                 <View key={`column-${columnIndex}`} style={styles.infoGridColumn}>
-                  {columnFields.map((field) => {
-                    const fieldStyle =
-                      field.align === "center"
-                        ? styles.infoGridFieldCentered
-                        : styles.infoGridField;
-                    return (
-                      <InfoColumn
-                        key={field.key}
-                        label={field.label}
-                        value={field.value}
-                        editable={field.editable}
-                        onChange={field.onChange}
-                        placeholder={field.placeholder}
-                        containerStyle={fieldStyle}
-                      />
-                    );
-                  })}
+                  {columnFields.map((field) => (
+                    <InfoColumn
+                      key={field.key}
+                      label={field.label}
+                      value={field.value}
+                      editable={field.editable}
+                      onChange={field.onChange}
+                      placeholder={field.placeholder}
+                      keyboardType={field.keyboardType}
+                      containerStyle={styles.infoGridField}
+                    />
+                  ))}
                 </View>
               ))}
             </View>
           </View>
 
+          {/* Seções de fotos */}
           {displayDetail.photoSections.map((section) => {
             const count = section.images.length;
             return (
@@ -837,15 +1050,25 @@ const columns = [
                     </Text>
                   )}
                 </View>
+
                 {isEditing ? (
                   <View style={styles.imageEditor}>
                     {section.images.length > 0 ? (
                       section.images.map((image, index) => (
                         <View key={`${section.id}-image-${index}`} style={styles.imageRow}>
                           <Image
-                            source={{ uri: image || "https://placehold.co/160x110?text=Imagem" }}
+                            source={{ uri: image }}
                             style={styles.imageThumbnail}
+                            resizeMode="cover"
                           />
+                          <View style={styles.imageInfo}>
+                            <Text style={styles.imageLabel} numberOfLines={1}>
+                              {isLocalUri(image) ? "Nova imagem" : `Imagem ${index + 1}`}
+                            </Text>
+                            {isLocalUri(image) && (
+                              <Text style={styles.imagePending}>Pendente de upload</Text>
+                            )}
+                          </View>
                           <View style={styles.imageActions}>
                             <TouchableOpacity
                               style={[styles.imageActionButton, styles.imageActionDanger]}
@@ -858,16 +1081,14 @@ const columns = [
                         </View>
                       ))
                     ) : (
-                      <Text style={styles.imageEmptyText}>
-                        Nenhuma imagem anexada ainda.
-                      </Text>
+                      <Text style={styles.imageEmptyText}>Nenhuma imagem anexada ainda.</Text>
                     )}
                     <View style={styles.imageFooterActions}>
                       <TouchableOpacity
                         style={styles.imageActionButton}
                         onPress={() =>
                           promptImageSource("Adicionar imagem", (source) =>
-                            handleAttachImage(section.id, source),
+                            handleAttachImage(section.id, source)
                           )
                         }
                         activeOpacity={0.85}
@@ -889,12 +1110,10 @@ const columns = [
                       styles.carouselContent,
                       { paddingHorizontal: CAROUSEL_ITEM_SPACING },
                     ]}
-                    ItemSeparatorComponent={() => (
-                      <View style={{ width: CAROUSEL_ITEM_SPACING }} />
-                    )}
+                    ItemSeparatorComponent={() => <View style={{ width: CAROUSEL_ITEM_SPACING }} />}
                     renderItem={({ item }) => (
                       <View style={[styles.carouselSlide, { width: slideWidth }]}>
-                        <Image source={{ uri: item }} style={styles.carouselImage} />
+                        <Image source={{ uri: item }} style={styles.carouselImage} resizeMode="cover" />
                       </View>
                     )}
                   />
@@ -902,7 +1121,9 @@ const columns = [
                   <View style={styles.carouselEmpty}>
                     <Text style={styles.carouselEmptyTitle}>Sem imagens</Text>
                     <Text style={styles.carouselEmptySubtitle}>
-                      Nenhuma imagem registrada para esta etapa.
+                      {isContainerCompleted
+                        ? "Nenhuma imagem registrada para esta etapa."
+                        : "Clique em Editar para adicionar imagens."}
                     </Text>
                   </View>
                 )}
@@ -911,17 +1132,18 @@ const columns = [
           })}
         </ScrollView>
       </View>
-
     </SafeAreaView>
   );
 };
 
+// Componente de campo de informação
 const InfoColumn = ({
   label,
   value,
   editable = false,
   onChange,
   placeholder,
+  keyboardType = "default",
   containerStyle,
 }: {
   label: string;
@@ -929,6 +1151,7 @@ const InfoColumn = ({
   editable?: boolean;
   onChange?: (value: string) => void;
   placeholder?: string;
+  keyboardType?: "default" | "numeric";
   containerStyle?: StyleProp<ViewStyle>;
 }) => {
   const displayValue = value && value.length > 0 ? value : "-";
@@ -942,6 +1165,8 @@ const InfoColumn = ({
           style={styles.infoInput}
           placeholder={placeholder}
           placeholderTextColor="#94A3B8"
+          keyboardType={keyboardType}
+          autoCorrect={false}
         />
       ) : (
         <Text style={styles.infoValue} numberOfLines={2}>
@@ -1009,17 +1234,24 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
     marginTop: 4,
-    alignSelf: "center",
+    flexWrap: "wrap",
   },
   actionButton: {
     paddingVertical: 8,
     paddingHorizontal: 16,
     borderRadius: 9999,
-    minWidth: 120,
+    minWidth: 100,
     alignItems: "center",
+    justifyContent: "center",
   },
   editButton: {
     backgroundColor: "#49C5B6",
+  },
+  completeButton: {
+    backgroundColor: "#22C55E",
+  },
+  completeButtonText: {
+    color: "#FFFFFF",
   },
   deleteButton: {
     backgroundColor: "rgba(248, 113, 113, 0.16)",
@@ -1041,6 +1273,13 @@ const styles = StyleSheet.create({
   },
   cancelButtonText: {
     color: "#334155",
+  },
+  buttonDisabled: {
+    opacity: 0.6,
+  },
+  savingRow: {
+    flexDirection: "row",
+    alignItems: "center",
   },
   contentContainer: {
     paddingHorizontal: 24,
@@ -1088,6 +1327,30 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 0.4,
   },
+  statusOptions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  statusOption: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 9999,
+    backgroundColor: "rgba(148, 163, 184, 0.16)",
+  },
+  statusOptionActive: {
+    backgroundColor: "#D1FAE5",
+    borderWidth: 1,
+    borderColor: "#34D399",
+  },
+  statusOptionText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#475569",
+  },
+  statusOptionTextActive: {
+    color: "#047857",
+  },
   infoGrid: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -1100,10 +1363,6 @@ const styles = StyleSheet.create({
   },
   infoGridField: {
     marginBottom: 16,
-  },
-  infoGridFieldCentered: {
-    marginBottom: 16,
-    alignItems: "center",
   },
   infoField: {
     width: "100%",
@@ -1170,7 +1429,7 @@ const styles = StyleSheet.create({
     height: "100%",
   },
   carouselEmpty: {
-    height: 220,
+    height: 180,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: "rgba(148, 163, 184, 0.24)",
@@ -1187,39 +1446,8 @@ const styles = StyleSheet.create({
   carouselEmptySubtitle: {
     fontSize: 13,
     color: "#64748B",
-  },
-  missingTitle: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#2A2E40",
-  },
-  missingSubtitle: {
-    fontSize: 14,
-    color: "#64748B",
-  },
-  statusOptions: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  statusOption: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 9999,
-    backgroundColor: "rgba(148, 163, 184, 0.16)",
-  },
-  statusOptionActive: {
-    backgroundColor: "#D1FAE5",
-    borderWidth: 1,
-    borderColor: "#34D399",
-  },
-  statusOptionText: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#475569",
-  },
-  statusOptionTextActive: {
-    color: "#047857",
+    textAlign: "center",
+    paddingHorizontal: 20,
   },
   imageEditor: {
     gap: 14,
@@ -1228,18 +1456,35 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
+    padding: 12,
+    backgroundColor: "#F8FAFC",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(148, 163, 184, 0.2)",
   },
   imageThumbnail: {
-    width: 90,
-    height: 64,
-    borderRadius: 14,
+    width: 80,
+    height: 60,
+    borderRadius: 10,
     backgroundColor: "#E2E8F0",
   },
-  imageActions: {
+  imageInfo: {
     flex: 1,
+    gap: 2,
+  },
+  imageLabel: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#2A2E40",
+  },
+  imagePending: {
+    fontSize: 11,
+    color: "#F59E0B",
+    fontWeight: "500",
+  },
+  imageActions: {
     flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
+    gap: 8,
   },
   imageActionButton: {
     paddingVertical: 8,
@@ -1265,12 +1510,22 @@ const styles = StyleSheet.create({
   imageEmptyText: {
     fontSize: 13,
     color: "#64748B",
+    fontStyle: "italic",
   },
   imageFooterActions: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 10,
     marginTop: 4,
+  },
+  missingTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#2A2E40",
+  },
+  missingSubtitle: {
+    fontSize: 14,
+    color: "#64748B",
   },
 });
 
