@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+﻿import React, { createContext, useContext, useState, ReactNode, useCallback } from 'react';
 import { router } from 'expo-router';
 import { Alert } from 'react-native';
 import { API_BASE_URL, API_ENABLED } from '../config/apiConfig';
@@ -6,13 +6,19 @@ import { API_BASE_URL, API_ENABLED } from '../config/apiConfig';
 interface User {
   cpf: string;
   requiresTwoFactor: boolean;
+  id?: number;
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+  role?: string;
+  twoFactorEnabled?: boolean;
 }
 
 interface LoginResponse {
   cpf: string;
   requiresTwoFactor: boolean;
   token?: string; // Token definitivo se 2FA=false
-  temporaryToken?: string; // Token temporário se 2FA=true
+  temporaryToken?: string; // Token tempor├írio se 2FA=true
 }
 
 interface TwoFAResponse {
@@ -23,14 +29,14 @@ interface TwoFAResponse {
 
 interface AuthContextType {
   // Estados
-  token: string | null; // Token definitivo para sessão
-  tempToken: string | null; // Token temporário para verificação 2FA
+  token: string | null; // Token definitivo para sess├úo
+  tempToken: string | null; // Token tempor├írio para verifica├º├úo 2FA
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
   requiresTwoFactor: boolean;
   
-  // Funções
+  // Fun├º├Áes
   login: (cpf: string, password: string) => Promise<boolean>;
   verifyTwoFactor: (code: string) => Promise<boolean>;
   logout: () => Promise<void>;
@@ -40,15 +46,45 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const normalizeCpf = (value: string) => value.replace(/\D/g, '');
 
-// Configurações da API
+// Busca perfil do usuário autenticado (usa token definitivo)
+const fetchUserProfile = async (token: string, fallbackCpf: string): Promise<Partial<User> | null> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/auth/me`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) {
+      console.warn('Falha ao carregar perfil do usuário:', response.status);
+      return null;
+    }
+
+    const data = await response.json();
+    return {
+      id: data?.id,
+      cpf: data?.cpf ?? fallbackCpf,
+      firstName: data?.firstName ?? data?.first_name,
+      lastName: data?.lastName ?? data?.last_name,
+      email: data?.email,
+      role: data?.role ?? data?.userRole ?? data?.authority,
+      twoFactorEnabled: data?.twoFactorEnabled ?? data?.two_factor_enabled,
+    };
+  } catch (error) {
+    console.warn('Erro ao carregar perfil do usuário:', error);
+    return null;
+  }
+};
+// Configura├º├Áes da API
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const [token, setToken] = useState<string | null>(null); // Token definitivo para sessão
-  const [tempToken, setTempToken] = useState<string | null>(null); // Token temporário para 2FA
+  const [token, setToken] = useState<string | null>(null); // Token definitivo para sess├úo
+  const [tempToken, setTempToken] = useState<string | null>(null); // Token tempor├írio para 2FA
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [requiresTwoFactor, setRequiresTwoFactor] = useState(false);
 
-  // Função de login inicial
+  // Fun├º├úo de login inicial
   const login = async (cpf: string, password: string): Promise<boolean> => {
     if (!API_ENABLED) {
       setIsLoading(true);
@@ -72,7 +108,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const formattedCpf = cpf;
       const cleanCpf = normalizeCpf(cpf);
       
-      console.log('🔄 Iniciando login...');
+      console.log('­ƒöä Iniciando login...');
       
       const response = await fetch(`${API_BASE_URL}/auth/login`, {
         method: 'POST',
@@ -115,7 +151,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         temporaryToken: tempTokenFromApi ?? undefined,
       };
       
-      console.log('📋 Resposta do login:', { 
+      console.log('­ƒôï Resposta do login:', { 
         cpf: loginData.cpf, 
         requiresTwoFactor: loginData.requiresTwoFactor,
         hasToken: !!loginData.token,
@@ -126,11 +162,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       
       if (loginData.requiresTwoFactor) {
         // Caso necessite 2FA - recebe temporaryToken
-        console.log('🔐 2FA necessário - salvando temporaryToken');
+        console.log('­ƒöÉ 2FA necess├írio - salvando temporaryToken');
         
         if (!loginData.temporaryToken) {
-          console.error('❌ temporaryToken não recebido');
-          Alert.alert('Erro', 'Token temporário não recebido do servidor.');
+          console.error('ÔØî temporaryToken n├úo recebido');
+          Alert.alert('Erro', 'Token tempor├írio n├úo recebido do servidor.');
           return false;
         }
         
@@ -142,23 +178,25 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         });
         setRequiresTwoFactor(true);
         
-        console.log('✅ temporaryToken salvo para verificação 2FA');
+        console.log('Ô£à temporaryToken salvo para verifica├º├úo 2FA');
         
         return true; // Login inicial bem-sucedido, mas precisa de 2FA
         
       } else {
         // Login direto sem 2FA - recebe token definitivo
-        console.log('✅ Login direto sem 2FA - token definitivo recebido');
+        console.log('Ô£à Login direto sem 2FA - token definitivo recebido');
         
         if (!loginData.token) {
-          Alert.alert('Erro', 'Token definitivo não recebido do servidor.');
+          Alert.alert('Erro', 'Token definitivo n├úo recebido do servidor.');
           return false;
         }
         
         // Salva como token DEFINITIVO
         setToken(loginData.token);
+        const profile = await fetchUserProfile(loginData.token, loginData.cpf);
         setUser({
-          cpf: loginData.cpf,
+          cpf: profile?.cpf ?? loginData.cpf,
+          ...profile,
           requiresTwoFactor: false
         });
         setRequiresTwoFactor(false);
@@ -170,15 +208,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
       
     } catch (error) {
-      console.error('❌ Erro no login:', error);
-      Alert.alert('Erro', 'Erro de conexão.');
+      console.error('ÔØî Erro no login:', error);
+      Alert.alert('Erro', 'Erro de conex├úo.');
       return false;
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Função de verificação 2FA
+  // Fun├º├úo de verifica├º├úo 2FA
   const verifyTwoFactor = async (code: string): Promise<boolean> => {
     if (!API_ENABLED) {
       setIsLoading(true);
@@ -194,8 +232,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
 
     if (!tempToken) {
-      console.error('❌ Token temporário não encontrado');
-      Alert.alert('Erro', 'Token temporário não encontrado. Faça login novamente.');
+      console.error('ÔØî Token tempor├írio n├úo encontrado');
+      Alert.alert('Erro', 'Token tempor├írio n├úo encontrado. Fa├ºa login novamente.');
       setRequiresTwoFactor(false);
       return false;
     }
@@ -203,23 +241,23 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     try {
       setIsLoading(true);
       
-      console.log('🔄 Verificando código 2FA...');
-      console.log('👤 Para usuário:', user?.cpf);
-      console.log('🎫 Usando temporaryToken:', `${tempToken.substring(0, 20)}...`);
-      console.log('🔢 Código enviado:', code);
+      console.log('­ƒöä Verificando c├│digo 2FA...');
+      console.log('­ƒæñ Para usu├írio:', user?.cpf);
+      console.log('­ƒÄ½ Usando temporaryToken:', `${tempToken.substring(0, 20)}...`);
+      console.log('­ƒöó C├│digo enviado:', code);
       
       const response = await fetch(`${API_BASE_URL}/auth/verify`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${tempToken}`, // Token temporário no header
+          'Authorization': `Bearer ${tempToken}`, // Token tempor├írio no header
         },
         body: JSON.stringify({
-          code: code // Apenas código no body
+          code: code // Apenas c├│digo no body
         })
       });
 
-      console.log('📥 Resposta /verify:', {
+      console.log('­ƒôÑ Resposta /verify:', {
         status: response.status,
         statusText: response.statusText,
         ok: response.ok
@@ -230,13 +268,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         try {
           const errorData = await response.json();
           errorDetails = errorData?.message ?? JSON.stringify(errorData);
-          console.log('📄 Detalhes do erro:', errorData);
+          console.log('­ƒôä Detalhes do erro:', errorData);
         } catch (e) {
-          console.log('❌ Erro ao ler resposta:', e);
+          console.log('ÔØî Erro ao ler resposta:', e);
         }
         
         const errorMessage = get2FAErrorMessage(response.status);
-        Alert.alert('Erro na Verificação', errorDetails || errorMessage);
+        Alert.alert('Erro na Verifica├º├úo', errorDetails || errorMessage);
         return false;
       }
 
@@ -250,7 +288,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         null;
 
       if (!finalToken) {
-        Alert.alert('Erro', 'Token definitivo não recebido na verificação 2FA.');
+        Alert.alert('Erro', 'Token definitivo n├úo recebido na verifica├º├úo 2FA.');
         return false;
       }
 
@@ -260,23 +298,25 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         status: rawTwoFA.status ?? 'authenticated',
       };
       
-      console.log('✅ 2FA verificado com sucesso:', { 
+      console.log('Ô£à 2FA verificado com sucesso:', { 
         cpf: twoFAData.cpf,
         status: twoFAData.status,
         finalTokenReceived: !!twoFAData.token,
         finalTokenPreview: twoFAData.token ? `${twoFAData.token.substring(0, 20)}...` : 'AUSENTE'
       });
       
-      // Substitui token temporário pelo TOKEN DEFINITIVO
-      setToken(twoFAData.token); // Token definitivo para a sessão
-      setTempToken(null); // Limpa token temporário
+      // Substitui token tempor├írio pelo TOKEN DEFINITIVO
+      setToken(twoFAData.token); // Token definitivo para a sess├úo
+      setTempToken(null); // Limpa token tempor├írio
       setRequiresTwoFactor(false);
+      const profile = await fetchUserProfile(twoFAData.token, twoFAData.cpf);
       setUser({
-        cpf: twoFAData.cpf,
+        cpf: profile?.cpf ?? twoFAData.cpf,
+        ...profile,
         requiresTwoFactor: false
       });
       
-      console.log('🎯 Token definitivo configurado - redirecionando para app');
+      console.log('­ƒÄ» Token definitivo configurado - redirecionando para app');
       
       // Navega para tela principal
       router.replace('/main/Logs');
@@ -284,34 +324,34 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       return true;
       
     } catch (error) {
-      console.error('❌ Erro na verificação 2FA:', error);
-      Alert.alert('Erro', `Erro de conexão: ${error}`);
+      console.error('ÔØî Erro na verifica├º├úo 2FA:', error);
+      Alert.alert('Erro', `Erro de conex├úo: ${error}`);
       return false;
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Função de logout
+  // Fun├º├úo de logout
   const logout = async (): Promise<void> => {
     try {
       setIsLoading(true);
       
-      console.log('🔄 Fazendo logout...');
+      console.log('­ƒöä Fazendo logout...');
       
       // Limpa todos os estados
       setToken(null); // Token definitivo
-      setTempToken(null); // Token temporário
+      setTempToken(null); // Token tempor├írio
       setUser(null);
       setRequiresTwoFactor(false);
       
-      console.log('✅ Logout realizado com sucesso');
+      console.log('Ô£à Logout realizado com sucesso');
       
       // Navega para login
       router.replace('/');
       
     } catch (error) {
-      console.error('❌ Erro no logout:', error);
+      console.error('ÔØî Erro no logout:', error);
     } finally {
       setIsLoading(false);
     }
@@ -323,7 +363,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       case 401:
         return 'CPF ou senha incorretos';
       case 400:
-        return 'Dados inválidos';
+        return 'Dados inv├ílidos';
       case 403:
         return 'Acesso negado';
       case 500:
@@ -337,11 +377,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const get2FAErrorMessage = (status: number): string => {
     switch (status) {
       case 400:
-        return 'Código inválido ou expirado';
+        return 'C├│digo inv├ílido ou expirado';
       case 401:
-        return 'Token temporário inválido. Faça login novamente.';
+        return 'Token tempor├írio inv├ílido. Fa├ºa login novamente.';
       case 403:
-        return 'Código incorreto';
+        return 'C├│digo incorreto';
       case 500:
         return 'Erro interno do servidor';
       default:
@@ -351,8 +391,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   return (
     <AuthContext.Provider value={{
-      token, // Token definitivo para sessão
-      tempToken, // Token temporário para 2FA
+      token, // Token definitivo para sess├úo
+      tempToken, // Token tempor├írio para 2FA
       user,
       isAuthenticated: !!token, // Autenticado apenas com token definitivo
       isLoading,
@@ -375,22 +415,22 @@ export const useAuth = () => {
   return context;
 };
 
-// Hook para requisições autenticadas (usa apenas token definitivo)
+// Hook para requisi├º├Áes autenticadas (usa apenas token definitivo)
 export const useAuthenticatedFetch = () => {
   const { token, logout } = useAuth();
 
-  const authenticatedFetch = async (url: string, options: RequestInit = {}) => {
+  const authenticatedFetch = useCallback(async (url: string, options: RequestInit = {}) => {
     if (!API_ENABLED) {
       console.warn('API desabilitada: requisicao ignorada', url);
       throw new Error('API disabled');
     }
-    console.log('🔍 useAuthenticatedFetch - Iniciando requisição');
-    console.log('🔗 URL:', url);
-    console.log('🔑 Token disponível:', token ? `${token.substring(0, 30)}...` : 'NENHUM TOKEN');
+    console.log('­ƒöì useAuthenticatedFetch - Iniciando requisi├º├úo');
+    console.log('­ƒöù URL:', url);
+    console.log('­ƒöæ Token dispon├¡vel:', token ? `${token.substring(0, 30)}...` : 'NENHUM TOKEN');
     
     if (!token) {
-      console.error('❌ Token não disponível para requisição autenticada');
-      throw new Error('Token não disponível');
+      console.error('ÔØî Token n├úo dispon├¡vel para requisi├º├úo autenticada');
+      throw new Error('Token n├úo dispon├¡vel');
     }
 
     // Cria headers dinamicamente baseado no tipo de body
@@ -398,7 +438,7 @@ export const useAuthenticatedFetch = () => {
       'Authorization': `Bearer ${token}`,
     };
 
-    // Se não é FormData, adiciona Content-Type application/json
+    // Se n├úo ├® FormData, adiciona Content-Type application/json
     if (!(options.body instanceof FormData)) {
       headers['Content-Type'] = 'application/json';
     }
@@ -409,7 +449,7 @@ export const useAuthenticatedFetch = () => {
       ...options.headers,
     };
 
-    console.log('📤 Headers da requisição:', {
+    console.log('­ƒôñ Headers da requisi├º├úo:', {
       ...finalHeaders,
       'Authorization': `Bearer ${token.substring(0, 30)}...` // Log parcial do token
     });
@@ -419,23 +459,25 @@ export const useAuthenticatedFetch = () => {
       headers: finalHeaders,
     });
 
-    console.log('📥 Resposta da requisição autenticada:', {
+    console.log('­ƒôÑ Resposta da requisi├º├úo autenticada:', {
       status: response.status,
       statusText: response.statusText,
       ok: response.ok
     });
 
-    // Se token expirou, faz logout automático
+    // Se token expirou, faz logout autom├ítico
     if (response.status === 401) {
-      console.log('🔒 Token expirado (401), fazendo logout automático');
+      console.log('­ƒöÆ Token expirado (401), fazendo logout autom├ítico');
       await logout();
-      throw new Error('Sessão expirada');
+      throw new Error('Sess├úo expirada');
     }
 
     return response;
-  };
+  }, [token, logout]);
 
   return authenticatedFetch;
 };
 
 export default function() { return null; }
+
+

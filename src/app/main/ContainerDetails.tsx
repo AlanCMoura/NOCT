@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from "react";
+﻿import React, { useEffect, useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -184,6 +184,7 @@ const ContainerDetails = () => {
 
   const operationCodeParam = decodeParam(params.operationCode);
   const operationNameParam = decodeParam(params.operationName);
+  const operationIdParam = decodeParam(params.operationId);
   const isCreateMode =
     !containerId ||
     normalizedId === "novo" ||
@@ -393,6 +394,19 @@ const fetchImagesByCategory = async (
     fetchContainerDetail(containerId);
   }, [containerId, isCreateMode]);
 
+  // Preparar tela de criação
+  useEffect(() => {
+    if (!isCreateMode) return;
+
+    const draft = buildEmptyContainer({
+      operationCode: operationCodeParam ?? "",
+      operationName: operationNameParam ?? "",
+    });
+    setDraftDetail(draft);
+    setCurrentDetail(draft);
+    setIsEditing(true);
+  }, [isCreateMode, operationCodeParam, operationNameParam]);
+
   // Valores derivados
   const baseDetail = currentDetail;
   const displayDetail = isEditing && draftDetail ? draftDetail : baseDetail;
@@ -520,123 +534,215 @@ const fetchImagesByCategory = async (
 
   // Salvar edição
   const handleEditSave = async () => {
-    if (!draftDetail || !containerId || saving) return;
+    if (!draftDetail || saving) return;
+
+    const resolvedId = (draftDetail.code || "").trim();
+    if (!resolvedId) {
+      Alert.alert("Erro", "Informe um ID para o container.");
+      return;
+    }
 
     setSaving(true);
 
     try {
-      // Diferença entre imagens originais (API) e atuais (salvar)
-      const removedImagesByCategory = draftDetail.photoSections.reduce<
-        Record<string, { urls: string[]; ids: string[]; urlToId: Record<string, string> }>
-      >(
-        (acc, section) => {
-          const sectionConfig = CATEGORY_SECTIONS.find((c) => c.id === section.id);
-          if (!sectionConfig) return acc;
+      const otherSealsArray =
+        draftDetail.otherSeals
+          ?.split(",")
+          .map((s) => s.trim())
+          .filter((s) => s.length > 0) ?? [];
 
-          const original = originalImages[section.id] ?? [];
-          const currentRemote = section.images.filter((uri) => !isLocalUri(uri));
-          const removed = original.filter((url) => !currentRemote.includes(url));
-          if (removed.length) {
-            const idMap = imageIdMap[section.id] ?? {};
-            const ids = removed
-              .map((url) => idMap[url])
-              .filter((id): id is string => typeof id === "string" && id.length > 0);
-            acc[sectionConfig.apiCategory] = { urls: removed, ids, urlToId: idMap };
-          }
-          return acc;
-        },
-        {}
+      const hasNewImages = draftDetail.photoSections.some((section) =>
+        section.images.some((uri) => isLocalUri(uri))
       );
 
-      // 1. Atualizar dados do container
+      const resolvedOperationId = operationIdParam ?? displayDetail?.operationCode ?? "";
+      const resolvedOperationIdNumber = Number(resolvedOperationId);
+
       const payload = {
+        containerId: resolvedId,
         description: draftDetail.description?.trim() ?? "",
+        operationId: Number.isNaN(resolvedOperationIdNumber) ? resolvedOperationId : resolvedOperationIdNumber,
         sacksCount: Number(draftDetail.sacariaQuantity) || 0,
         tareTons: Number(draftDetail.tare) || 0,
         liquidWeight: Number(draftDetail.netWeight) || 0,
         grossWeight: Number(draftDetail.grossWeight) || 0,
         agencySeal: draftDetail.sealAgency?.trim() ?? "",
-        otherSeals:
-          draftDetail.otherSeals
-            ?.split(",")
-            .map((s) => s.trim())
-            .filter((s) => s.length > 0) ?? [],
-        status: mapStatusToApi(draftDetail.status ?? "Aberto"),
+        otherSeals: otherSealsArray,
       };
 
-      console.log("📤 Atualizando container:", payload);
+      let savedContainerId = containerId;
 
-      const updateResponse = await authFetch(
-        `${API_BASE_URL}/containers/${encodeURIComponent(containerId)}`,
-        {
-          method: "PUT",
-          body: JSON.stringify(payload),
+      if (isCreateMode) {
+        if (!payload.operationId) {
+          Alert.alert("Erro", "Operação não informada para criar o container.");
+          return;
         }
-      );
 
-      if (!updateResponse.ok) {
-        const errorText = await updateResponse.text();
-        console.error("Erro ao atualizar container:", errorText);
-        Alert.alert("Erro", `Não foi possível salvar o container. ${errorText}`);
-        return;
-      }
+        if (hasNewImages) {
+          const form = new FormData();
+          form.append("containerId", payload.containerId);
+          form.append("description", payload.description);
+          form.append("operationId", String(payload.operationId));
+          form.append("sacksCount", String(payload.sacksCount || 0));
+          form.append("tareTons", String(payload.tareTons || 0));
+          form.append("liquidWeight", String(payload.liquidWeight || 0));
+          form.append("grossWeight", String(payload.grossWeight || 0));
+          form.append("agencySeal", payload.agencySeal ?? "");
+          otherSealsArray.forEach((seal) => form.append("otherSeals", seal));
 
-      // 2. Remover imagens apagadas
-      const deletionResults = await Promise.all(
-        Object.entries(removedImagesByCategory).map(([apiCategory, images]) =>
-          deleteImagesByCategory(containerId, apiCategory, images)
-        )
-      );
+          draftDetail.photoSections.forEach((section) => {
+            const sectionConfig = CATEGORY_SECTIONS.find((c) => c.id === section.id);
+            if (!sectionConfig) return;
+            const localImages = section.images.filter((uri) => isLocalUri(uri));
+            localImages.forEach((uri, idx) => {
+              const filename = `${sectionConfig.uploadField}_${idx}_${Date.now()}.jpg`;
+              form.append(sectionConfig.uploadField, {
+                uri,
+                name: filename,
+                type: "image/jpeg",
+              } as any);
+            });
+          });
 
-      if (deletionResults.some((ok) => !ok)) {
-        Alert.alert("Aviso", "Algumas imagens não puderam ser excluídas. Tente novamente.");
-      }
-
-      // 2. Upload de novas imagens (locais)
-      const form = new FormData();
-      let hasNewImages = false;
-
-      draftDetail.photoSections.forEach((section) => {
-        const sectionConfig = CATEGORY_SECTIONS.find((c) => c.id === section.id);
-        if (!sectionConfig) return;
-
-        const localImages = section.images.filter((uri) => isLocalUri(uri));
-
-        localImages.forEach((uri, idx) => {
-          const filename = `${sectionConfig.uploadField}_${idx}_${Date.now()}.jpg`;
-          form.append(sectionConfig.uploadField, {
-            uri,
-            name: filename,
-            type: "image/jpeg",
-          } as any);
-          hasNewImages = true;
-        });
-      });
-
-      if (hasNewImages) {
-        console.log("📤 Enviando novas imagens...");
-
-        const uploadResponse = await authFetch(
-          `${API_BASE_URL}/containers/${encodeURIComponent(containerId)}/images`,
-          {
+          const createWithImages = await authFetch(`${API_BASE_URL}/containers/images`, {
             method: "POST",
             body: form,
+          });
+
+          if (!createWithImages.ok) {
+            const errorText = await createWithImages.text();
+            Alert.alert("Erro", `Não foi possível criar o container.\n${errorText}`);
+            return;
+          }
+
+          const created = await createWithImages.json();
+          savedContainerId = created?.containerId || created?.id || resolvedId;
+        } else {
+          const createResponse = await authFetch(`${API_BASE_URL}/containers`, {
+            method: "POST",
+            body: JSON.stringify(payload),
+          });
+
+          if (!createResponse.ok) {
+            const errorText = await createResponse.text();
+            Alert.alert("Erro", `Não foi possível criar o container.\n${errorText}`);
+            return;
+          }
+
+          const created = await createResponse.json();
+          savedContainerId = created?.containerId || created?.id || resolvedId;
+        }
+      } else {
+        if (!containerId) {
+          Alert.alert("Erro", "Container não encontrado.");
+          return;
+        }
+
+        // Diferença entre imagens originais (API) e atuais (salvar)
+        const removedImagesByCategory = draftDetail.photoSections.reduce<
+          Record<string, { urls: string[]; ids: string[]; urlToId: Record<string, string> }>
+        >(
+          (acc, section) => {
+            const sectionConfig = CATEGORY_SECTIONS.find((c) => c.id === section.id);
+            if (!sectionConfig) return acc;
+
+            const original = originalImages[section.id] ?? [];
+            const currentRemote = section.images.filter((uri) => !isLocalUri(uri));
+            const removed = original.filter((url) => !currentRemote.includes(url));
+            if (removed.length) {
+              const idMap = imageIdMap[section.id] ?? {};
+              const ids = removed
+                .map((url) => idMap[url])
+                .filter((id): id is string => typeof id === "string" && id.length > 0);
+              acc[sectionConfig.apiCategory] = { urls: removed, ids, urlToId: idMap };
+            }
+            return acc;
+          },
+          {}
+        );
+
+        console.log("Atualizando container:", payload);
+
+        const updateResponse = await authFetch(
+          `${API_BASE_URL}/containers/${encodeURIComponent(containerId)}`,
+          {
+            method: "PUT",
+            body: JSON.stringify(payload),
           }
         );
 
-        if (!uploadResponse.ok) {
-          const errorText = await uploadResponse.text();
-          console.warn("Aviso: Falha ao enviar algumas imagens:", errorText);
-          // Não interrompe o fluxo, apenas avisa
-        } else {
-          console.log("✅ Imagens enviadas com sucesso");
+        if (!updateResponse.ok) {
+          const errorText = await updateResponse.text();
+          console.error("Erro ao atualizar container:", errorText);
+          Alert.alert("Erro", `Não foi possível salvar o container. ${errorText}`);
+          return;
+        }
+
+        const deletionResults = await Promise.all(
+          Object.entries(removedImagesByCategory).map(([apiCategory, images]) =>
+            deleteImagesByCategory(containerId, apiCategory, images)
+          )
+        );
+
+        if (deletionResults.some((ok) => !ok)) {
+          Alert.alert("Aviso", "Algumas imagens não puderam ser excluídas. Tente novamente.");
+        }
+
+        savedContainerId = resolvedId;
+
+        if (hasNewImages && savedContainerId) {
+          const form = new FormData();
+
+          draftDetail.photoSections.forEach((section) => {
+            const sectionConfig = CATEGORY_SECTIONS.find((c) => c.id === section.id);
+            if (!sectionConfig) return;
+
+            const localImages = section.images.filter((uri) => isLocalUri(uri));
+
+            localImages.forEach((uri, idx) => {
+              const filename = `${sectionConfig.uploadField}_${idx}_${Date.now()}.jpg`;
+              form.append(sectionConfig.uploadField, {
+                uri,
+                name: filename,
+                type: "image/jpeg",
+              } as any);
+            });
+          });
+
+          const uploadResponse = await authFetch(
+            `${API_BASE_URL}/containers/${encodeURIComponent(savedContainerId)}/images`,
+            {
+              method: "POST",
+              body: form,
+            }
+          );
+
+          if (!uploadResponse.ok) {
+            const errorText = await uploadResponse.text();
+            console.warn("Aviso: Falha ao enviar algumas imagens:", errorText);
+            Alert.alert("Aviso", "Falha ao enviar algumas imagens. Tente novamente.");
+          } else {
+            console.log("Imagens enviadas com sucesso");
+          }
         }
       }
 
-      // 3. Recarregar dados atualizados
-      await fetchContainerDetail(containerId);
+      if (savedContainerId) {
+        if (isCreateMode) {
+          router.replace({
+            pathname: "/main/ContainerDetails",
+            params: { id: encodeURIComponent(savedContainerId) },
+          });
+        }
+        await fetchContainerDetail(savedContainerId);
+        setIsEditing(false);
+      }
 
-      Alert.alert("Sucesso", hasNewImages ? "Container e imagens atualizados." : "Container atualizado.");
+      if (isCreateMode) {
+        Alert.alert("Sucesso", hasNewImages ? "Container criado e imagens enviadas." : "Container criado.");
+      } else {
+        Alert.alert("Sucesso", hasNewImages ? "Container e imagens atualizados." : "Container atualizado.");
+      }
     } catch (err) {
       console.error("Erro ao salvar container:", err);
       Alert.alert("Erro", "Não foi possível salvar o container.");
@@ -790,8 +896,9 @@ const fetchImagesByCategory = async (
       key: "code",
       label: "Identificação",
       value: isEditing ? draftDetail?.code ?? "" : displayDetail.code ?? "-",
-      editable: false, // ID não é editável
-      placeholder: "Identificador",
+      editable: isEditing,
+      onChange: isEditing ? (value: string) => updateDraft("code", value.trimStart()) : undefined,
+      placeholder: "Identificador (obrigatório)",
     },
     {
       key: "description",
@@ -989,32 +1096,6 @@ const fetchImagesByCategory = async (
                 </View>
               )}
             </View>
-
-            {/* Seletor de status (modo edição) */}
-            {isEditing && (
-              <View style={styles.statusEditor}>
-                <Text style={styles.editLabel}>Status do container</Text>
-                <View style={styles.statusOptions}>
-                  {STATUS_OPTIONS.map((status) => {
-                    const isActive = draftDetail?.status === status;
-                    return (
-                      <TouchableOpacity
-                        key={status}
-                        style={[styles.statusOption, isActive && styles.statusOptionActive]}
-                        onPress={() => updateDraft("status", status)}
-                        activeOpacity={0.85}
-                      >
-                        <Text
-                          style={[styles.statusOptionText, isActive && styles.statusOptionTextActive]}
-                        >
-                          {STATUS_MAP[status].label}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              </View>
-            )}
 
             {/* Grid de informações */}
             <View style={styles.infoGrid}>

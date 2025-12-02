@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -14,7 +14,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Svg, Path } from "react-native-svg";
 import { cssInterop } from "nativewind";
-import { router, useLocalSearchParams } from "expo-router";
+import { router, useLocalSearchParams, useFocusEffect } from "expo-router";
 import CustomStatusBar from "../components/StatusBar";
 import SacariaModal from "../components/SacariaModal";
 import type {
@@ -39,7 +39,6 @@ const formatDate = (value: string | Date | undefined | null): string => {
   return Intl.DateTimeFormat("pt-BR", { dateStyle: "medium" }).format(date);
 };
 
-// Normaliza entrada de data para o formato YYYY-MM-DD enquanto digita
 const normalizeDateInput = (value: string): string => {
   const digits = value.replace(/\D/g, "").slice(0, 8);
   if (digits.length <= 4) return digits;
@@ -79,7 +78,6 @@ const StatusChip = ({ status }: { status: string }) => {
   );
 };
 
-// Tipo completo da operação com todos os campos
 type OperationInfo = {
   id: number;
   ctv: string;
@@ -95,7 +93,6 @@ type OperationInfo = {
   status: string;
 };
 
-// Campos a exibir na tela de informações
 const OPERATION_INFO_FIELDS: Array<{ key: keyof OperationInfo; label: string; isDate?: boolean }> = [
   { key: "id", label: "ID" },
   { key: "ctv", label: "CTV" },
@@ -110,7 +107,6 @@ const OPERATION_INFO_FIELDS: Array<{ key: keyof OperationInfo; label: string; is
   { key: "loadDeadline", label: "Deadline de Carregamento", isDate: true },
 ];
 
-// Tipo da resposta da API
 type ApiOperation = {
   id?: number;
   ctv?: string;
@@ -138,12 +134,18 @@ type ApiSackImage = {
 };
 
 type ApiContainer = {
-  id?: string | number;
+  id?: number;
   containerId?: string;
   ctv?: string;
-  grossWeight?: string;
+  grossWeight?: number | string;
   weight?: string;
   status?: string;
+  description?: string;
+  sacksCount?: number;
+  tareTons?: number;
+  liquidWeight?: number;
+  agencySeal?: string;
+  otherSeals?: string[];
 };
 
 const normalizeSackImages = (images?: Array<string | undefined | null>): string[] => {
@@ -158,19 +160,6 @@ const normalizeSackImages = (images?: Array<string | undefined | null>): string[
   });
 
   return normalized;
-};
-
-const extractSackImageKey = (url?: string): string | undefined => {
-  if (!url) return undefined;
-  try {
-    const parsed = new URL(url);
-    const segments = parsed.pathname.split("/").filter(Boolean);
-    const lastSegment = segments[segments.length - 1];
-    return lastSegment?.split("?")[0];
-  } catch {
-    const match = url.match(/\/([^/?#]+)(?:\?|#|$)/);
-    return match?.[1];
-  }
 };
 
 const OperationDetails = () => {
@@ -193,7 +182,6 @@ const OperationDetails = () => {
   const [containersLoading, setContainersLoading] = useState<boolean>(false);
   const [sackImageIdMap, setSackImageIdMap] = useState<Record<string, number>>({});
 
-  // Derivados
   const totalContainers = containers.length > 0 ? containers.length : detail?.containers?.length ?? 0;
   const sacariaImages = useMemo(() => normalizeSackImages(sacariaInfo?.images), [sacariaInfo?.images]);
   const imageCount = sacariaImages.length;
@@ -203,6 +191,22 @@ const OperationDetails = () => {
     typeof uri === "string" &&
     (uri.startsWith("file://") || uri.startsWith("content://"));
 
+  // ========== NAVEGAÇÃO PARA CRIAR CONTAINER ==========
+  const handleCreateContainer = () => {
+    if (!operationId) return;
+
+    router.push({
+      pathname: "/main/ContainerDetails",
+      params: {
+        id: "create",
+        operationId: operationId,
+        operationCode: detail?.ctv || detail?.reservation || "",
+        operationName: detail?.destination || "",
+      },
+    });
+  };
+
+  // ========== FUNÇÕES DE SACARIA ==========
   const uploadSackImages = async (imageUris: string[]): Promise<boolean> => {
     const locals = imageUris.filter((uri) => isLocalUri(uri));
     if (locals.length === 0 || !operationId) return true;
@@ -245,7 +249,6 @@ const OperationDetails = () => {
     }
   };
 
-  // Mapeia a resposta da API para OperationInfo
   const mapApiToOperationInfo = (api: ApiOperation): OperationInfo => {
     return {
       id: api.id ?? 0,
@@ -375,6 +378,15 @@ const OperationDetails = () => {
     }
   };
 
+  // Recarregar containers ao voltar para a tela
+  useFocusEffect(
+    useCallback(() => {
+      if (operationId && !loading) {
+        fetchContainers(operationId);
+      }
+    }, [operationId])
+  );
+
   useEffect(() => {
     fetchOperation();
   }, [operationId]);
@@ -410,6 +422,7 @@ const OperationDetails = () => {
     try {
       const response = await authFetch(`${API_BASE_URL}/operations/${operationId}`, {
         method: "PUT",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
 
@@ -492,16 +505,20 @@ const OperationDetails = () => {
   const handleContainerPress = (containerId: string) => {
     router.push({
       pathname: "/main/ContainerDetails",
-      params: { id: encodeURIComponent(containerId) },
+      params: { 
+        id: encodeURIComponent(containerId),
+        operationId: operationId,
+      },
     });
   };
 
-  // Normalizar containers para exibição
-  const normalizedContainers = (detail?.containers ?? []).map((item: any, idx: number) => ({
-    id: item?.containerId || item?.ctv || item?.id || `CNTR-${idx + 1}`,
-    weight: item?.grossWeight || item?.weight || "",
-    status: item?.status || "OPEN",
-  }));
+  const normalizedContainers = useMemo(() => {
+    return containers.map((item, idx) => ({
+      id: item?.containerId || String(item?.id) || `CNTR-${idx + 1}`,
+      weight: item?.grossWeight ? String(item.grossWeight) : item?.weight || "",
+      status: item?.status || "OPEN",
+    }));
+  }, [containers]);
 
   return (
     <SafeAreaView className="flex-1" style={{ backgroundColor: "#F6F8FB" }}>
@@ -686,6 +703,15 @@ const OperationDetails = () => {
           <View style={styles.card}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Containers da Operação</Text>
+              {!isOperationClosed && (
+                <TouchableOpacity
+                  style={styles.createButton}
+                  activeOpacity={0.85}
+                  onPress={handleCreateContainer}
+                >
+                  <Text style={styles.createButtonText}>+ Criar</Text>
+                </TouchableOpacity>
+              )}
             </View>
 
             {(loading || containersLoading) ? (
@@ -719,7 +745,7 @@ const OperationDetails = () => {
                         <StatusChip status={item.status} />
                       </View>
                       {item.weight && (
-                        <Text style={styles.containerWeight}>Peso bruto: {item.weight}kg</Text>
+                        <Text style={styles.containerWeight}>Peso bruto: {item.weight} ton</Text>
                       )}
                     </TouchableOpacity>
                   )}
@@ -729,7 +755,7 @@ const OperationDetails = () => {
               <View style={styles.emptyState}>
                 <Text style={styles.emptyStateTitle}>Sem containers</Text>
                 <Text style={styles.emptyStateSubtitle}>
-                  Não há containers para exibir nesta operação.
+                  Clique em "+ Criar" para adicionar um container.
                 </Text>
               </View>
             )}
@@ -915,6 +941,20 @@ const styles = StyleSheet.create({
   totalValue: {
     fontWeight: "700",
     color: "#5046E5",
+  },
+  createButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 9999,
+    backgroundColor: "#49C5B6",
+    minWidth: 80,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  createButtonText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#FFFFFF",
   },
   containerCardSpacing: {
     marginBottom: 12,

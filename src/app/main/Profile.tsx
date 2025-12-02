@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect, useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -6,29 +6,55 @@ import {
   ScrollView,
   TouchableOpacity,
   StyleSheet,
-} from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Svg, Path } from 'react-native-svg';
-import { cssInterop } from 'nativewind';
-import { router } from 'expo-router';
-import CustomStatusBar from '../components/StatusBar';
+  ActivityIndicator,
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Svg, Path } from "react-native-svg";
+import { cssInterop } from "nativewind";
+import { router } from "expo-router";
+import CustomStatusBar from "../components/StatusBar";
+import { useAuthenticatedFetch, useAuth } from "../contexts/_AuthContext";
+import { API_BASE_URL } from "../config/apiConfig";
 
-cssInterop(View, { className: 'style' });
-cssInterop(Text, { className: 'style' });
-cssInterop(SafeAreaView, { className: 'style' });
-cssInterop(ScrollView, { className: 'style' });
-cssInterop(TouchableOpacity, { className: 'style' });
+cssInterop(View, { className: "style" });
+cssInterop(Text, { className: "style" });
+cssInterop(SafeAreaView, { className: "style" });
+cssInterop(ScrollView, { className: "style" });
+cssInterop(TouchableOpacity, { className: "style" });
 
-const PROFILE_DATA = {
-  firstName: 'Carlos',
-  lastName: 'Oliveira',
-  role: 'Gerente',
-  email: 'carlos.oliveira@empresa.com',
-  phone: '(11) 99999-0000',
-  cpf: '123.456.789-00',
-  twoFactorEnabled: true,
-  createdAt: '2024-01-10',
-  lastAccess: '2025-08-26 09:12',
+type ProfileData = {
+  id?: number;
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+  phone?: string;
+  cpf?: string;
+  role?: string;
+  twoFactorEnabled?: boolean;
+  createdAt?: string;
+  lastAccess?: string;
+};
+
+const fallbackProfile: ProfileData = {
+  firstName: "-",
+  lastName: "",
+  email: "-",
+  phone: "-",
+  cpf: "-",
+  role: "-",
+  twoFactorEnabled: false,
+};
+
+const formatCpf = (value?: string) => {
+  const digits = (value || "").replace(/\D/g, "");
+  if (digits.length !== 11) return value || "-";
+  return digits.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
+};
+
+const formatPhone = (value?: string) => {
+  const digits = (value || "").replace(/\D/g, "");
+  if (digits.length < 10) return value || "-";
+  return digits.replace(/(\d{2})(\d{5})(\d{4})/, "($1) $2-$3");
 };
 
 const InfoField = ({
@@ -42,21 +68,13 @@ const InfoField = ({
   highlight?: boolean;
   fullWidth?: boolean;
 }) => (
-  <View
-    style={[
-      styles.infoField,
-      fullWidth && styles.infoFieldFullWidth,
-    ]}
-  >
+  <View style={[styles.infoField, fullWidth && styles.infoFieldFullWidth]}>
     <Text className="text-xs uppercase" style={styles.fieldLabel}>
       {label}
     </Text>
     <Text
       className="text-base"
-      style={[
-        styles.fieldValue,
-        highlight && styles.fieldValueHighlight,
-      ]}
+      style={[styles.fieldValue, highlight && styles.fieldValueHighlight]}
     >
       {value}
     </Text>
@@ -66,28 +84,69 @@ const InfoField = ({
 const Profile = () => {
   const insets = useSafeAreaInsets();
   const headerPaddingTop = Math.max(insets.top, 12) + 12;
+  const authFetch = useAuthenticatedFetch();
+  const { user } = useAuth();
+
+  const [profile, setProfile] = useState<ProfileData>(fallbackProfile);
+  const [loading, setLoading] = useState<boolean>(true);
+
+  const loadProfile = useCallback(async () => {
+    try {
+      setLoading(true);
+      const resp = await authFetch(`${API_BASE_URL}/auth/me`);
+      if (!resp.ok) {
+        console.warn("Falha ao carregar perfil:", resp.status);
+        setProfile(fallbackProfile);
+        return;
+      }
+      const data = await resp.json();
+      setProfile({
+        id: data?.id,
+        firstName: data?.firstName ?? data?.first_name ?? "-",
+        lastName: data?.lastName ?? data?.last_name ?? "",
+        email: data?.email ?? "-",
+        phone: formatPhone(data?.phone ?? data?.telefone),
+        cpf: formatCpf(data?.cpf),
+        role: data?.role ?? data?.userRole ?? data?.authority ?? user?.role ?? "-",
+        twoFactorEnabled: data?.twoFactorEnabled ?? data?.two_factor_enabled ?? user?.twoFactorEnabled ?? false,
+        createdAt: data?.createdAt,
+        lastAccess: data?.lastAccess,
+      });
+    } catch (err) {
+      console.warn("Erro ao carregar perfil:", err);
+      setProfile(fallbackProfile);
+    } finally {
+      setLoading(false);
+    }
+  }, [authFetch, user]);
+
+  useEffect(() => {
+    loadProfile();
+  }, [loadProfile]);
 
   const initials = useMemo(() => {
-    const firstInitial = PROFILE_DATA.firstName.charAt(0) || '';
-    const lastInitial = PROFILE_DATA.lastName.charAt(0) || '';
+    const firstInitial = (profile.firstName || "").charAt(0);
+    const lastInitial = (profile.lastName || "").charAt(0);
     return `${firstInitial}${lastInitial}`.toUpperCase();
-  }, []);
+  }, [profile.firstName, profile.lastName]);
+
+  if (loading) {
+    return (
+      <SafeAreaView className="flex-1" style={{ backgroundColor: "#F6F8FB" }}>
+        <CustomStatusBar barStyle="dark-content" backgroundColor="#F6F8FB" translucent={true} />
+        <View className="flex-1 items-center justify-center">
+          <ActivityIndicator size="large" color="#49C5B6" />
+          <Text style={{ marginTop: 12, color: "#2A2E40" }}>Carregando perfil...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
-    <SafeAreaView className="flex-1" style={{ backgroundColor: '#F6F8FB' }}>
-      <CustomStatusBar
-        barStyle="dark-content"
-        backgroundColor="#F6F8FB"
-        translucent={true}
-      />
+    <SafeAreaView className="flex-1" style={{ backgroundColor: "#F6F8FB" }}>
+      <CustomStatusBar barStyle="dark-content" backgroundColor="#F6F8FB" translucent={true} />
       <View className="flex-1">
-        <View
-          className="w-full px-6 pb-4"
-          style={[
-            styles.header,
-            { paddingTop: headerPaddingTop },
-          ]}
-        >
+        <View className="w-full px-6 pb-4" style={[styles.header, { paddingTop: headerPaddingTop }]}>
           <View className="flex-row items-start justify-between">
             <View className="flex-row items-center flex-shrink">
               <TouchableOpacity
@@ -115,10 +174,10 @@ const Profile = () => {
             <View className="flex-row items-center">
               <View className="items-end mr-3">
                 <Text className="text-base font-semibold" style={styles.userName}>
-                  {PROFILE_DATA.firstName} {PROFILE_DATA.lastName}
+                  {profile.firstName} {profile.lastName}
                 </Text>
                 <Text className="text-xs" style={styles.userRole}>
-                  {PROFILE_DATA.role}
+                  {profile.role}
                 </Text>
               </View>
               <View style={styles.avatar}>
@@ -144,15 +203,15 @@ const Profile = () => {
               </View>
               <View className="ml-4">
                 <Text className="text-xl font-semibold" style={styles.cardName}>
-                  {PROFILE_DATA.firstName} {PROFILE_DATA.lastName}
+                  {profile.firstName} {profile.lastName}
                 </Text>
                 <View style={styles.roleBadge}>
                   <Text className="text-xs font-semibold" style={styles.roleBadgeText}>
-                    {PROFILE_DATA.role}
+                    {profile.role}
                   </Text>
                 </View>
                 <Text className="text-sm" style={styles.cardEmail}>
-                  {PROFILE_DATA.email}
+                  {profile.email}
                 </Text>
               </View>
             </View>
@@ -166,28 +225,21 @@ const Profile = () => {
               Dados básicos do seu cadastro
             </Text>
             <View style={styles.infoGrid}>
-              <InfoField label="Nome" value={PROFILE_DATA.firstName} />
-              <InfoField label="Sobrenome" value={PROFILE_DATA.lastName} />
-              <InfoField label="CPF" value={PROFILE_DATA.cpf} highlight />
-              <InfoField label="Telefone" value={PROFILE_DATA.phone} />
+              <InfoField label="Nome" value={profile.firstName || "-"} />
+              <InfoField label="Sobrenome" value={profile.lastName || "-"} />
+              <InfoField label="CPF" value={profile.cpf || "-"} highlight />
+              <InfoField label="Telefone" value={profile.phone || "-"} />
               <View style={styles.infoField}>
                 <Text className="text-xs uppercase" style={styles.fieldLabel}>
                   Perfil
                 </Text>
                 <View style={styles.roleBadgeSmall}>
-                  <Text
-                    className="text-xs font-semibold"
-                    style={styles.roleBadgeSmallText}
-                  >
-                    {PROFILE_DATA.role}
+                  <Text className="text-xs font-semibold" style={styles.roleBadgeSmallText}>
+                    {profile.role || "-"}
                   </Text>
                 </View>
               </View>
-              <InfoField
-                label="Email"
-                value={PROFILE_DATA.email}
-                fullWidth
-              />
+              <InfoField label="Email" value={profile.email || "-"} fullWidth />
             </View>
           </View>
 
@@ -206,16 +258,11 @@ const Profile = () => {
                 <View
                   style={[
                     styles.statusBadge,
-                    PROFILE_DATA.twoFactorEnabled
-                      ? styles.statusBadgeActive
-                      : styles.statusBadgeInactive,
+                    profile.twoFactorEnabled ? styles.statusBadgeActive : styles.statusBadgeInactive,
                   ]}
                 >
-                  <Text
-                    className="text-xs font-semibold"
-                    style={styles.statusBadgeText}
-                  >
-                    {PROFILE_DATA.twoFactorEnabled ? 'Ativo' : 'Inativo'}
+                  <Text className="text-xs font-semibold" style={styles.statusBadgeText}>
+                    {profile.twoFactorEnabled ? "Ativo" : "Inativo"}
                   </Text>
                 </View>
               </View>
@@ -229,10 +276,10 @@ const Profile = () => {
 
 const styles = StyleSheet.create({
   header: {
-    backgroundColor: '#FFFFFF',
-    borderBottomColor: 'rgba(42, 46, 64, 0.08)',
+    backgroundColor: "#FFFFFF",
+    borderBottomColor: "rgba(42, 46, 64, 0.08)",
     borderBottomWidth: 1,
-    shadowColor: '#000000',
+    shadowColor: "#000000",
     shadowOpacity: 0.05,
     shadowRadius: 6,
     shadowOffset: { width: 0, height: 2 },
@@ -240,27 +287,27 @@ const styles = StyleSheet.create({
   },
   iconButton: {
     borderRadius: 9999,
-    backgroundColor: 'rgba(73, 197, 182, 0.12)',
+    backgroundColor: "rgba(73, 197, 182, 0.12)",
   },
   headerTitle: {
-    color: '#2A2E40',
+    color: "#2A2E40",
   },
   userName: {
-    color: '#2A2E40',
+    color: "#2A2E40",
   },
   userRole: {
-    color: '#6D7380',
+    color: "#6D7380",
   },
   avatar: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#49C5B6',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: "#49C5B6",
+    alignItems: "center",
+    justifyContent: "center",
   },
   avatarText: {
-    color: '#FFFFFF',
+    color: "#FFFFFF",
   },
   contentContainer: {
     paddingHorizontal: 24,
@@ -268,10 +315,10 @@ const styles = StyleSheet.create({
     gap: 20,
   },
   card: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: "#FFFFFF",
     borderRadius: 18,
     padding: 20,
-    shadowColor: '#000000',
+    shadowColor: "#000000",
     shadowOpacity: 0.05,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 4 },
@@ -281,90 +328,90 @@ const styles = StyleSheet.create({
     width: 76,
     height: 76,
     borderRadius: 38,
-    backgroundColor: '#49C5B6',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: "#49C5B6",
+    alignItems: "center",
+    justifyContent: "center",
   },
   cardName: {
-    color: '#2A2E40',
+    color: "#2A2E40",
   },
   roleBadge: {
     marginTop: 6,
-    alignSelf: 'flex-start',
-    backgroundColor: '#E8EDF9',
+    alignSelf: "flex-start",
+    backgroundColor: "#E8EDF9",
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 9999,
   },
   roleBadgeText: {
-    color: '#5046E5',
+    color: "#5046E5",
   },
   cardEmail: {
     marginTop: 6,
-    color: '#6D7380',
+    color: "#6D7380",
   },
   sectionTitle: {
-    color: '#2A2E40',
+    color: "#2A2E40",
   },
   sectionSubtitle: {
-    color: '#6D7380',
+    color: "#6D7380",
   },
   infoGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: "row",
+    flexWrap: "wrap",
   },
   infoColumn: {
-    flexDirection: 'column',
+    flexDirection: "column",
     gap: 18,
   },
   infoField: {
-    width: '50%',
+    width: "50%",
     marginBottom: 18,
     paddingRight: 12,
   },
   infoFieldFullWidth: {
-    width: '100%',
+    width: "100%",
     paddingRight: 0,
   },
   fieldLabel: {
-    color: '#6D7380',
-    fontWeight: '600',
+    color: "#6D7380",
+    fontWeight: "600",
     letterSpacing: 0.5,
   },
   fieldValue: {
-    color: '#2A2E40',
+    color: "#2A2E40",
     marginTop: 6,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   fieldValueHighlight: {
-    fontWeight: '700',
+    fontWeight: "700",
   },
   roleBadgeSmall: {
     marginTop: 6,
-    alignSelf: 'flex-start',
-    backgroundColor: '#E8EDF9',
+    alignSelf: "flex-start",
+    backgroundColor: "#E8EDF9",
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 9999,
   },
   roleBadgeSmallText: {
-    color: '#5046E5',
+    color: "#5046E5",
   },
   statusBadge: {
     marginTop: 6,
     paddingHorizontal: 12,
     paddingVertical: 4,
     borderRadius: 9999,
-    alignSelf: 'flex-start',
+    alignSelf: "flex-start",
   },
   statusBadgeActive: {
-    backgroundColor: 'rgba(73, 197, 182, 0.16)',
+    backgroundColor: "rgba(73, 197, 182, 0.16)",
   },
   statusBadgeInactive: {
-    backgroundColor: 'rgba(226, 232, 240, 0.8)',
+    backgroundColor: "rgba(226, 232, 240, 0.8)",
   },
   statusBadgeText: {
-    color: '#2A2E40',
+    color: "#2A2E40",
   },
 });
 
