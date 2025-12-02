@@ -83,12 +83,6 @@ const ListItem: React.FC<ListItemProps> = ({ data, onPress }) => {
             >
               {operationLabel}
             </Text>
-            <Text
-          className="text-xs font-semibold mt-1"
-          style={{ color: "#6B7280" }}
-        >
-          {containerCount} {containerCount === 1 ? "container" : "containers"}
-        </Text>
       </View>
           <View
             className="px-3 py-1 rounded-full"

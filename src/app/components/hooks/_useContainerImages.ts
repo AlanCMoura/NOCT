@@ -1,6 +1,6 @@
 // src/hooks/useContainerImages.ts
 import { useState, useEffect } from 'react';
-import { API_BASE_URL } from '../../config/apiConfig';
+import { API_BASE_URL } from '../../../config/apiConfig';
 
 interface UseContainerImagesProps {
   containerId: string;

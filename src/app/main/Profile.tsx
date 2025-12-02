@@ -14,7 +14,7 @@ import { cssInterop } from "nativewind";
 import { router } from "expo-router";
 import CustomStatusBar from "../components/StatusBar";
 import { useAuthenticatedFetch, useAuth } from "../contexts/_AuthContext";
-import { API_BASE_URL } from "../config/apiConfig";
+import { API_BASE_URL } from "../../config/apiConfig";
 
 cssInterop(View, { className: "style" });
 cssInterop(Text, { className: "style" });

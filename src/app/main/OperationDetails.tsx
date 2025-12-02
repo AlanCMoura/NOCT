@@ -20,8 +20,8 @@ import SacariaModal from "../components/SacariaModal";
 import type {
   OperationCargoDetail,
   OperationDetail,
-} from "../types/operation";
-import { API_BASE_URL } from "../config/apiConfig";
+} from "../../types/operation";
+import { API_BASE_URL } from "../../config/apiConfig";
 import { useAuthenticatedFetch } from "../contexts/_AuthContext";
 
 cssInterop(View, { className: "style" });

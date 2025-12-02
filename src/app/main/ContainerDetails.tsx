@@ -26,10 +26,10 @@ import {
   type ContainerStatus,
   type ContainerPhotoSection,
   createEmptyPhotoSections,
-} from "../types/container";
+} from "../../types/container";
 import * as ImagePicker from "expo-image-picker";
 import { useAuthenticatedFetch } from "../contexts/_AuthContext";
-import { API_BASE_URL } from "../config/apiConfig";
+import { API_BASE_URL } from "../../config/apiConfig";
 
 cssInterop(View, { className: "style" });
 cssInterop(Text, { className: "style" });
@@ -39,6 +39,16 @@ cssInterop(TouchableOpacity, { className: "style" });
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const CAROUSEL_ITEM_SPACING = 16;
+const LIBRARY_PICKER_OPTIONS: ImagePicker.ImagePickerOptions = {
+  mediaTypes: "images",
+  allowsMultipleSelection: false,
+  quality: 0.7,
+};
+const BACK_CAMERA_PICKER_OPTIONS: ImagePicker.ImagePickerOptions = {
+  mediaTypes: "images",
+  quality: 0.7,
+  cameraType: ImagePicker.CameraType.back, // regra: sempre abrir com a câmera traseira
+};
 
 const formatDate = (value: string) => {
   if (!value) return "-";
@@ -475,16 +485,8 @@ const fetchImagesByCategory = async (
 
       const pickerResult =
         source === "library"
-          ? await ImagePicker.launchImageLibraryAsync({
-              mediaTypes: ImagePicker.MediaTypeOptions.Images,
-              allowsMultipleSelection: false,
-              quality: 0.7,
-            })
-          : await ImagePicker.launchCameraAsync({
-              mediaTypes: ImagePicker.MediaTypeOptions.Images,
-              quality: 0.7,
-              cameraType: ImagePicker.CameraType.back,
-            });
+          ? await ImagePicker.launchImageLibraryAsync(LIBRARY_PICKER_OPTIONS)
+          : await ImagePicker.launchCameraAsync(BACK_CAMERA_PICKER_OPTIONS);
 
       if (!pickerResult.canceled && pickerResult.assets?.length) {
         return pickerResult.assets[0]?.uri;

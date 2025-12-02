@@ -1,6 +1,10 @@
-﻿import '../styles/global.css';
-import { Stack } from 'expo-router';
-import { AuthProvider } from './contexts/_AuthContext';
+import "../styles/global.css";
+import { Stack } from "expo-router";
+import { LogBox } from "react-native";
+import { AuthProvider } from "./contexts/_AuthContext";
+
+// Oculta banners de aviso no app; mantenha o console para debugging quando necessário
+LogBox.ignoreAllLogs(true);
 
 export default function RootLayout() {
   return (

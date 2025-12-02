@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, Modal, ScrollView, ActivityIndicator, Image, Dimensions } from 'react-native';
 import { cssInterop } from 'nativewind';
 import { Svg, Path } from 'react-native-svg';
-import { API_BASE_URL } from '../config/apiConfig';
+import { API_BASE_URL } from '../../config/apiConfig';
 
 // Configuração do cssInterop
 cssInterop(View, { className: 'style' });

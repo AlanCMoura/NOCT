@@ -1,7 +1,7 @@
 ﻿import React, { createContext, useContext, useState, ReactNode, useCallback } from 'react';
 import { router } from 'expo-router';
 import { Alert } from 'react-native';
-import { API_BASE_URL, API_ENABLED } from '../config/apiConfig';
+import { API_BASE_URL, API_ENABLED } from '../../config/apiConfig';
 
 interface User {
   cpf: string;

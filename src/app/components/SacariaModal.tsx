@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { Svg, Path } from 'react-native-svg';
 import { cssInterop } from 'nativewind';
-import type { OperationCargoDetail } from '../types/operation';
+import type { OperationCargoDetail } from '../../types/operation';
 import * as ImagePicker from 'expo-image-picker';
 
 cssInterop(View, { className: 'style' });
@@ -22,6 +22,16 @@ cssInterop(TouchableOpacity, { className: 'style' });
 cssInterop(ScrollView, { className: 'style' });
 
 const CAROUSEL_ITEM_SPACING = 16;
+const LIBRARY_PICKER_OPTIONS: ImagePicker.ImagePickerOptions = {
+  mediaTypes: "images",
+  allowsMultipleSelection: false,
+  quality: 0.7,
+};
+const BACK_CAMERA_PICKER_OPTIONS: ImagePicker.ImagePickerOptions = {
+  mediaTypes: "images",
+  quality: 0.7,
+  cameraType: ImagePicker.CameraType.back, // força sempre iniciar com a câmera traseira
+};
 
 interface SacariaModalProps {
   visible: boolean;
@@ -169,16 +179,8 @@ const SacariaModal: React.FC<SacariaModalProps> = ({
 
       const result =
         source === 'library'
-          ? await ImagePicker.launchImageLibraryAsync({
-              mediaTypes: ImagePicker.MediaTypeOptions.Images,
-              allowsMultipleSelection: false,
-              quality: 0.7,
-            })
-          : await ImagePicker.launchCameraAsync({
-              mediaTypes: ImagePicker.MediaTypeOptions.Images,
-              quality: 0.7,
-              cameraType: ImagePicker.CameraType.back,
-            });
+          ? await ImagePicker.launchImageLibraryAsync(LIBRARY_PICKER_OPTIONS)
+          : await ImagePicker.launchCameraAsync(BACK_CAMERA_PICKER_OPTIONS);
 
       if (!result.canceled && result.assets?.[0]?.uri) {
         handleAddImage(result.assets[0].uri);

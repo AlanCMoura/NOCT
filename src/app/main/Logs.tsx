@@ -9,7 +9,7 @@ import Sidebar from '../components/Sidebar';
 import { router } from 'expo-router';
 import { useAuth, useAuthenticatedFetch } from '../contexts/_AuthContext';
 import CustomStatusBar from '../components/StatusBar'; // Importando o componente CustomStatusBar
-import { API_BASE_URL } from '../config/apiConfig';
+import { API_BASE_URL } from '../../config/apiConfig';
 
 // Interop para permitir o uso de classes Tailwind em componentes React Native
 cssInterop(View, { className: 'style' });

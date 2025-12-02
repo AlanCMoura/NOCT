@@ -20,7 +20,7 @@ import { cssInterop } from "nativewind";
 import { Picker } from '@react-native-picker/picker';
 import { useAuth, useAuthenticatedFetch } from './contexts/_AuthContext';
 import CustomStatusBar from './components/StatusBar'; // Importando o componente CustomStatusBar
-import { API_BASE_URL, API_ENABLED } from './config/apiConfig';
+import { API_BASE_URL, API_ENABLED } from '../config/apiConfig';
 
 // Aplicando cssInterop para todos os componentes que vamos estilizar
 cssInterop(Text, {
