@@ -1,4 +1,14 @@
 {
   "java.compile.nullAnalysis.mode": "disabled",
-  "java.configuration.updateBuildConfiguration": "interactive"
+  // Evita que a extensão Java tente indexar node_modules e gere erros de build path
+  "java.configuration.updateBuildConfiguration": "disabled",
+  "java.import.exclusions": [
+    "**/node_modules/**",
+    "**/.expo/**"
+  ],
+  "java.project.sourcePaths": [
+    "android/app/src/main/java",
+    "android/app/src/debug/java",
+    "android/app/src/androidTest/java"
+  ]
 }
