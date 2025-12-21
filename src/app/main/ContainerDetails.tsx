@@ -20,6 +20,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Svg, Path } from "react-native-svg";
 import { cssInterop } from "nativewind";
 import { router, useLocalSearchParams } from "expo-router";
+import NetInfo from "@react-native-community/netinfo";
 import CustomStatusBar from "../components/StatusBar";
 import {
   type ContainerDetail,
@@ -29,6 +30,7 @@ import {
 } from "../../types/container";
 import * as ImagePicker from "expo-image-picker";
 import { useAuthenticatedFetch } from "../contexts/_AuthContext";
+import { useOfflineOperations } from "../contexts/OfflineOperationsContext";
 import { API_BASE_URL } from "../../config/apiConfig";
 
 cssInterop(View, { className: "style" });
@@ -202,6 +204,12 @@ const ContainerDetails = () => {
     normalizedId === "create";
 
   const authFetch = useAuthenticatedFetch();
+  const {
+    pendingSummaries,
+    syncPendingOperations,
+    queueContainerCreate,
+    queueContainerUpdate,
+  } = useOfflineOperations();
 
   // Estados principais
   const [currentDetail, setCurrentDetail] = useState<ContainerDetail | undefined>(undefined);
@@ -211,6 +219,7 @@ const ContainerDetails = () => {
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isOffline, setIsOffline] = useState(false);
 
   // Estado para rastrear imagens originais (para detectar remoções)
   const [originalImages, setOriginalImages] = useState<Record<string, string[]>>({});
@@ -239,6 +248,19 @@ const ContainerDetails = () => {
     },
     [operationCodeParam, operationNameParam]
   );
+
+  // Monitorar conectividade para decidir fila offline e exibição do banner
+  useEffect(() => {
+    const setInitial = async () => {
+      const state = await NetInfo.fetch();
+      setIsOffline(!(state?.isConnected && state.isInternetReachable !== false));
+    };
+    setInitial();
+    const unsubscribe = NetInfo.addEventListener((state) => {
+      setIsOffline(!(state?.isConnected && state.isInternetReachable !== false));
+    });
+    return () => unsubscribe();
+  }, []);
 
 // Buscar imagens por categoria
 const fetchImagesByCategory = async (
@@ -556,6 +578,14 @@ const fetchImagesByCategory = async (
       const hasNewImages = draftDetail.photoSections.some((section) =>
         section.images.some((uri) => isLocalUri(uri))
       );
+      const newImagesPayload =
+        draftDetail.photoSections.flatMap((section) => {
+          const sectionConfig = CATEGORY_SECTIONS.find((c) => c.id === section.id);
+          if (!sectionConfig) return [];
+          return section.images
+            .filter((uri) => isLocalUri(uri))
+            .map((uri) => ({ uri, field: sectionConfig.uploadField }));
+        }) ?? [];
 
       const resolvedOperationId = operationIdParam ?? displayDetail?.operationCode ?? "";
       const resolvedOperationIdNumber = Number(resolvedOperationId);
@@ -571,6 +601,80 @@ const fetchImagesByCategory = async (
         agencySeal: draftDetail.sealAgency?.trim() ?? "",
         otherSeals: otherSealsArray,
       };
+
+      const removedImagesByCategory = draftDetail.photoSections.reduce<
+        Record<string, { urls: string[]; ids: string[]; urlToId: Record<string, string> }>
+      >(
+        (acc, section) => {
+          const sectionConfig = CATEGORY_SECTIONS.find((c) => c.id === section.id);
+          if (!sectionConfig) return acc;
+
+          const original = originalImages[section.id] ?? [];
+          const currentRemote = section.images.filter((uri) => !isLocalUri(uri));
+          const removed = original.filter((url) => !currentRemote.includes(url));
+          if (removed.length) {
+            const idMap = imageIdMap[section.id] ?? {};
+            const ids = removed
+              .map((url) => idMap[url])
+              .filter((id): id is string => typeof id === "string" && id.length > 0);
+            acc[sectionConfig.apiCategory] = { urls: removed, ids, urlToId: idMap };
+          }
+          return acc;
+        },
+        {}
+      );
+
+      const netState = await NetInfo.fetch();
+      const isOnline = netState?.isConnected === true && netState?.isInternetReachable !== false;
+
+      // Fluxo offline: salva em fila e retorna
+      if (!isOnline) {
+        if (isCreateMode) {
+          await queueContainerCreate({ body: payload, images: newImagesPayload });
+          const offlineDetail: ContainerDetail = {
+            ...draftDetail,
+            id: resolvedId,
+            code: resolvedId,
+            operationCode: String(payload.operationId ?? ""),
+            description: payload.description,
+            sacariaQuantity: String(payload.sacksCount ?? ""),
+            tare: String(payload.tareTons ?? ""),
+            netWeight: String(payload.liquidWeight ?? ""),
+            grossWeight: String(payload.grossWeight ?? ""),
+            sealAgency: payload.agencySeal ?? "",
+            otherSeals: draftDetail.otherSeals ?? "",
+          };
+          setCurrentDetail(offlineDetail);
+          setDraftDetail(offlineDetail);
+          setIsEditing(false);
+          Alert.alert(
+            "Sem conexao",
+            "Container salvo localmente e sera enviado quando a conexao voltar."
+          );
+        } else if (containerId) {
+          await queueContainerUpdate({
+            containerId,
+            body: payload,
+            images: newImagesPayload,
+            removedImages: Object.entries(removedImagesByCategory).map(([apiCategory, images]) => ({
+              apiCategory,
+              urls: images.urls,
+              ids: images.ids,
+            })),
+          });
+          setCurrentDetail(draftDetail);
+          setDraftDetail(draftDetail);
+          setIsEditing(false);
+          Alert.alert(
+            "Sem conexao",
+            "Atualizacao do container foi salva localmente e sera enviada quando a conexao voltar."
+          );
+        } else {
+          Alert.alert("Erro", "Container nao encontrado para salvar offline.");
+        }
+        setSaving(false);
+        return;
+      }
 
       let savedContainerId = containerId;
 
@@ -970,6 +1074,9 @@ const fetchImagesByCategory = async (
     infoFields.filter((field) => !leftColumnKeys.includes(field.key)),
   ];
 
+  const pendingContainers = pendingSummaries.filter((op) => op.type?.includes("container"));
+  const pendingIds = pendingContainers.map((op) => op.label ?? String(op.id));
+
   const headerPaddingTop = Math.max(insets.top, 12) + 12;
   const slideWidth = Math.max((SCREEN_WIDTH - CAROUSEL_ITEM_SPACING) / 1.5, 220);
   const snapInterval = slideWidth + CAROUSEL_ITEM_SPACING;
@@ -1076,6 +1183,13 @@ const fetchImagesByCategory = async (
         </View>
 
         {/* Conteúdo */}
+        {isOffline && pendingIds.length > 0 && (
+          <View style={styles.offlineBanner}>
+            <Text style={styles.offlineBannerTitle}>Containers pendentes</Text>
+            <Text style={styles.offlineBannerText}>{pendingIds.join(", ")}</Text>
+          </View>
+        )}
+
         <ScrollView
           className="flex-1"
           showsVerticalScrollIndicator={false}
@@ -1300,6 +1414,26 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 14,
     color: "#6D7380",
+  },
+  offlineBanner: {
+    marginHorizontal: 24,
+    marginTop: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    backgroundColor: "rgba(73, 197, 182, 0.15)",
+    borderWidth: 1,
+    borderColor: "rgba(73, 197, 182, 0.35)",
+  },
+  offlineBannerTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#0F766E",
+    marginBottom: 4,
+  },
+  offlineBannerText: {
+    fontSize: 13,
+    color: "#0F766E",
   },
   statusChip: {
     paddingHorizontal: 14,

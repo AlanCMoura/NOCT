@@ -1,0 +1,380 @@
+NetInfo.fetch();
+      setIsOffline(!(state?.isConnected && state.isInternetReachable !== false));
+    };
+    setInitial();
+    const unsubscribe = NetInfo.addEventListener((state) => {
+      setIsOffline(!(state?.isConnected && state.isInternetReachable !== false));
+    });
+    return () => unsubscribe();
+  }, []);
+
+// Buscar imagens por categoria
+const fetchImagesByCategory = async (
+    id: string,
+    apiCategory: string
+  ): Promise<{ urls: string[]; idMap: Record<string, string> }> => {
+    try {
+      const response = await authFetch(
+        `${API_BASE_URL}/containers/${encodeURIComponent(id)}/images/${apiCategory}?expirationMinutes=120`
+      );
+
+      if (!response.ok) {
+        if (response.status === 404) return { urls: [], idMap: {} };
+        console.warn(`Erro ao buscar imagens ${apiCategory}: ${response.status}`);
+        return { urls: [], idMap: {} };
+      }
+
+      const data = await response.json();
+
+      const urls: string[] = [];
+      const idMap: Record<string, string> = {};
+
+      if (Array.isArray(data)) {
+        data.forEach((item: any) => {
+          const url =
+            typeof item === "string"
+              ? item
+              : item?.imageUrl || item?.signedUrl || item?.url;
+          const id = item?.id ?? item?.imageId ?? item?.imageKey;
+          if (typeof url === "string" && url.length > 0) {
+            urls.push(url);
+            if (id != null) idMap[url] = String(id);
+          }
+        });
+      }
+
+      return { urls, idMap };
+    } catch (err) {
+      console.warn(`Erro ao buscar imagens ${apiCategory}:`, err);
+      return { urls: [], idMap: {} };
+    }
+  };
+
+  // Excluir imagens removidas
+  const deleteImagesByCategory = async (
+    id: string,
+    _apiCategory: string,
+    payload: { urls: string[]; ids: string[]; urlToId?: Record<string, string> }
+  ): Promise<boolean> => {
+    const { urls, ids, urlToId = {} } = payload;
+    if (urls.length === 0 && ids.length === 0) return true;
+
+    const deleteById = async (imageId: string) => {
+      try {
+        const resp = await authFetch(
+          `${API_BASE_URL}/containers/${encodeURIComponent(id)}/images/${encodeURIComponent(imageId)}`,
+          { method: "DELETE" }
+        );
+        return resp.ok || resp.status === 404;
+      } catch (err) {
+        console.warn(`Erro ao excluir imagem ${imageId}:`, err);
+        return false;
+      }
+    };
+
+    // Prioriza IDs; se não houver, tenta pela URL (caso o backend aceite imageUrl como query)
+    const deleteByUrl = async (url: string) => {
+      try {
+        const resp = await authFetch(
+          `${API_BASE_URL}/containers/${encodeURIComponent(id)}/images?imageUrl=${encodeURIComponent(url)}`,
+          { method: "DELETE" }
+        );
+        return resp.ok || resp.status === 404;
+      } catch (err) {
+        console.warn(`Erro ao excluir imagem por URL:`, err);
+        return false;
+      }
+    };
+
+    const results: boolean[] = [];
+
+    if (ids.length > 0) {
+      const idResults = await Promise.all(ids.map((imageId) => deleteById(imageId)));
+      results.push(...idResults);
+    }
+
+    const urlsWithoutId = urls.filter((url) => !urlToId[url]);
+    if (urlsWithoutId.length > 0) {
+      const urlResults = await Promise.all(urlsWithoutId.map((url) => deleteByUrl(url)));
+      results.push(...urlResults);
+    }
+
+    return results.every(Boolean);
+  };
+
+  // Buscar todas as imagens do container
+  const fetchAllImages = async (id: string): Promise<ContainerPhotoSection[]> => {
+    const idMapAccumulator: Record<string, Record<string, string>> = {};
+
+    const sectionsWithImages = await Promise.all(
+      CATEGORY_SECTIONS.map(async (section) => {
+        const { urls, idMap } = await fetchImagesByCategory(id, section.apiCategory);
+        idMapAccumulator[section.id] = idMap;
+        return {
+          id: section.id,
+          title: section.title,
+          images: urls,
+        };
+      })
+    );
+
+    const originals: Record<string, string[]> = {};
+    sectionsWithImages.forEach((section) => {
+      originals[section.id] = [...section.images];
+    });
+    setOriginalImages(originals);
+    setImageIdMap(idMapAccumulator);
+
+    return sectionsWithImages;
+  };
+
+  // Buscar detalhes do container
+  const fetchContainerDetail = async (id: string) => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response = await authFetch(`${API_BASE_URL}/containers/${encodeURIComponent(id)}`);
+
+      if (!response.ok) {
+        if (response.status === 404) {
+          setError("Container não encontrado");
+        } else {
+          setError(`Erro ${response.status} ao carregar container`);
+        }
+        setCurrentDetail(undefined);
+        return;
+      }
+
+      const apiData: ApiContainer = await response.json();
+      console.log("📥 Dados do container recebidos:", apiData);
+
+      const mapped = mapContainerDetail(apiData, id);
+
+      // Buscar imagens de todas as categorias
+      const photoSections = await fetchAllImages(id);
+
+      setCurrentDetail({ ...mapped, photoSections });
+      setIsEditing(false);
+      setDraftDetail(undefined);
+    } catch (err) {
+      console.error("Erro ao buscar container:", err);
+      setError("Não foi possível carregar o container.");
+      setCurrentDetail(undefined);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Efeito para carregar dados
+  useEffect(() => {
+    if (!containerId || isCreateMode) return;
+    fetchContainerDetail(containerId);
+  }, [containerId, isCreateMode]);
+
+  // Preparar tela de criação
+  useEffect(() => {
+    if (!isCreateMode) return;
+
+    const draft = buildEmptyContainer({
+      operationCode: operationCodeParam ?? "",
+      operationName: operationNameParam ?? "",
+    });
+    setDraftDetail(draft);
+    setCurrentDetail(draft);
+    setIsEditing(true);
+  }, [isCreateMode, operationCodeParam, operationNameParam]);
+
+  // Valores derivados
+  const baseDetail = currentDetail;
+  const displayDetail = isEditing && draftDetail ? draftDetail : baseDetail;
+  const safeStatus = displayDetail?.status ?? "Aberto";
+  const statusInfo = STATUS_MAP[safeStatus] ?? STATUS_MAP["Aberto"];
+  const isContainerCompleted = displayDetail?.status === "Completo";
+
+  // Handlers de edição
+  const handleCompleteToggle = (value: boolean) => {
+    if (!value || isContainerCompleted || saving) return;
+    handleCompleteContainer();
+  };
+
+  const handleEditPress = () => {
+    if (!baseDetail || isContainerCompleted) return;
+    setDraftDetail({ ...baseDetail });
+    setIsEditing(true);
+  };
+
+  const updateDraft = <K extends keyof ContainerDetail>(key: K, value: ContainerDetail[K]) => {
+    setDraftDetail((prev) => (prev ? { ...prev, [key]: value } : prev));
+  };
+
+  const updatePhotoSection = (
+    sectionId: string,
+    updater: (section: ContainerPhotoSection) => ContainerPhotoSection
+  ) => {
+    setDraftDetail((prev) =>
+      prev
+        ? {
+            ...prev,
+            photoSections: prev.photoSections.map((section) =>
+              section.id === sectionId ? updater(section) : section
+            ),
+          }
+        : prev
+    );
+  };
+
+  // Remover imagem
+  const handleRemoveImage = (sectionId: string, index: number) => {
+    if (!isEditing) return;
+    updatePhotoSection(sectionId, (section) => ({
+      ...section,
+      images: section.images.filter((_, idx) => idx !== index),
+    }));
+  };
+
+  // Selecionar imagem
+  const pickImage = async (source: "library" | "camera"): Promise<string | undefined> => {
+    try {
+      const permission =
+        source === "library"
+          ? await ImagePicker.requestMediaLibraryPermissionsAsync()
+          : await ImagePicker.requestCameraPermissionsAsync();
+
+      if (permission.status !== "granted") {
+        Alert.alert(
+          "Permissão necessária",
+          source === "library"
+            ? "Precisamos de acesso à sua galeria para anexar imagens."
+            : "Precisamos de acesso à câmera para registrar novas imagens."
+        );
+        return undefined;
+      }
+
+      const pickerResult =
+        source === "library"
+          ? await ImagePicker.launchImageLibraryAsync(LIBRARY_PICKER_OPTIONS)
+          : await ImagePicker.launchCameraAsync(BACK_CAMERA_PICKER_OPTIONS);
+
+      if (!pickerResult.canceled && pickerResult.assets?.length) {
+        return pickerResult.assets[0]?.uri;
+      }
+    } catch (err) {
+      console.error("Erro ao selecionar imagem:", err);
+      Alert.alert("Erro ao anexar", "Não foi possível captar a imagem. Tente novamente.");
+    }
+    return undefined;
+  };
+
+  // Anexar imagem a uma seção
+  const handleAttachImage = async (sectionId: string, source: "library" | "camera") => {
+    if (!isEditing || !draftDetail) return;
+    const uri = await pickImage(source);
+    if (!uri) return;
+
+    updatePhotoSection(sectionId, (section) => ({
+      ...section,
+      images: [...section.images, uri],
+    }));
+  };
+
+  // Prompt para escolher origem da imagem
+  const promptImageSource = (message: string, onSelect: (source: "library" | "camera") => void) => {
+    Alert.alert(message, "Selecione a origem da imagem", [
+      { text: "Cancelar", style: "cancel" },
+      { text: "Galeria", onPress: () => onSelect("library") },
+      { text: "Câmera", onPress: () => onSelect("camera") },
+    ]);
+  };
+
+  // Cancelar edição
+  const handleEditCancel = () => {
+    if (isCreateMode) {
+      router.back();
+      return;
+    }
+    setDraftDetail(undefined);
+    setIsEditing(false);
+  };
+
+  // Verificar se é URI local
+  const isLocalUri = (uri: string): boolean => {
+    return uri.startsWith("file://") || uri.startsWith("content://");
+  };
+
+  // Salvar edição
+  const handleEditSave = async () => {
+    if (!draftDetail || saving) return;
+
+    const resolvedId = (draftDetail.code || "").trim();
+    if (!resolvedId) {
+      Alert.alert("Erro", "Informe um ID para o container.");
+      return;
+    }
+
+    setSaving(true);
+
+    try {
+      const otherSealsArray =
+        draftDetail.otherSeals
+          ?.split(",")
+          .map((s) => s.trim())
+          .filter((s) => s.length > 0) ?? [];
+
+      const hasNewImages = draftDetail.photoSections.some((section) =>
+        section.images.some((uri) => isLocalUri(uri))
+      );
+      const newImagesPayload =
+        draftDetail.photoSections.flatMap((section) => {
+          const sectionConfig = CATEGORY_SECTIONS.find((c) => c.id === section.id);
+          if (!sectionConfig) return [];
+          return section.images
+            .filter((uri) => isLocalUri(uri))
+            .map((uri) => ({ uri, field: sectionConfig.uploadField }));
+        }) ?? [];
+
+      const resolvedOperationId = operationIdParam ?? displayDetail?.operationCode ?? "";
+      const resolvedOperationIdNumber = Number(resolvedOperationId);
+
+      const payload = {
+        containerId: resolvedId,
+        description: draftDetail.description?.trim() ?? "",
+        operationId: Number.isNaN(resolvedOperationIdNumber) ? resolvedOperationId : resolvedOperationIdNumber,
+        sacksCount: Number(draftDetail.sacariaQuantity) || 0,
+        tareTons: Number(draftDetail.tare) || 0,
+        liquidWeight: Number(draftDetail.netWeight) || 0,
+        grossWeight: Number(draftDetail.grossWeight) || 0,
+        agencySeal: draftDetail.sealAgency?.trim() ?? "",
+        otherSeals: otherSealsArray,
+      };
+
+      const netState = await NetInfo.fetch();
+      const isOnline = netState?.isConnected === true && netState?.isInternetReachable !== false;
+
+      // Fluxo offline: salva em fila e retorna
+      if (!isOnline) {
+        if (isCreateMode) {
+          await queueContainerCreate({ body: payload, images: newImagesPayload });
+          Alert.alert(
+            "Sem conexao",
+            "Container salvo localmente e sera enviado quando a conexao voltar."
+          );
+        } else if (containerId) {
+          await queueContainerUpdate({
+            containerId,
+            body: payload,
+            images: newImagesPayload,
+          });
+          Alert.alert(
+            "Sem conexao",
+            "Atualizacao do container foi salva localmente e sera enviada quando a conexao voltar."
+          );
+        } else {
+          Alert.alert("Erro", "Container nao encontrado para salvar offline.");
+        }
+        setSaving(false);
+        setIsEditing(false);
+        return;
+      }
+
+      let savedContainerId
