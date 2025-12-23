@@ -156,7 +156,13 @@ export default function Logs() {
   };
 
   const mapDataForListItem = (item: OperationItem): OperationCardData => {
-    const statusLabel = item.status ?? 'Aberta';
+    const normalizedStatus = (item.status ?? '').toLowerCase();
+    const isClosed =
+      normalizedStatus.includes('fech') ||
+      normalizedStatus.includes('close') ||
+      normalizedStatus.includes('final') ||
+      normalizedStatus.includes('compl');
+    const statusLabel = isClosed ? 'Fechada' : 'Aberta';
     const operationLabel =
       item.ctv ||
       item.container?.id ||

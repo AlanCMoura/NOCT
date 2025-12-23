@@ -48,7 +48,9 @@ const normalizeDateInput = (value: string): string => {
   return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6)}`;
 };
 
-const StatusChip = ({ status }: { status: string }) => {
+type StatusContext = "operation" | "container";
+
+const StatusChip = ({ status, context = "operation" }: { status: string; context?: StatusContext }) => {
   const normalized = status?.toLowerCase?.() ?? "";
   const isOpen = ["open", "aberto", "em andamento", "in_progress"].includes(normalized);
   const isPartial = ["partial", "parcial", "partial_load", "partial_loaded", "pending"].includes(normalized);
@@ -59,17 +61,31 @@ const StatusChip = ({ status }: { status: string }) => {
     : isPartial
       ? "rgba(250, 204, 21, 0.14)"
       : isOpen
-        ? "rgba(73, 197, 182, 0.18)"
+        ? context === "container"
+          ? "rgba(100, 116, 139, 0.16)"
+          : "rgba(250, 204, 21, 0.18)"
         : "rgba(226, 232, 240, 0.8)";
   const textColor = isClosed
     ? "#047857"
     : isPartial
       ? "#92400E"
       : isOpen
-        ? "#0F766E"
+        ? context === "container"
+          ? "#475569"
+          : "#92400E"
         : "#6D7380";
 
-  const displayLabel = isClosed ? "Completo" : isPartial ? "Parcial" : isOpen ? "Aberto" : status || "N/A";
+  const displayLabel = isClosed
+    ? context === "operation"
+      ? "Fechada"
+      : "Completo"
+    : isPartial
+      ? "Parcial"
+      : isOpen
+        ? context === "container"
+          ? "Não inicializado"
+          : "Aberta"
+        : status || "N/A";
 
   return (
     <View style={[styles.statusChip, { backgroundColor }]}>
@@ -616,7 +632,7 @@ const OperationDetails = () => {
               </View>
             </View>
             {detail && (
-              <StatusChip status={detail.status || "OPEN"} />
+              <StatusChip status={detail.status || "OPEN"} context="operation" />
             )}
           </View>
         </View>
@@ -810,7 +826,7 @@ const OperationDetails = () => {
                     >
                       <View style={styles.containerHeader}>
                         <Text style={styles.containerTitle}>{item.id}</Text>
-                        <StatusChip status={item.status} />
+                        <StatusChip status={item.status} context="container" />
                       </View>
                       {item.weight && (
                         <Text style={styles.containerWeight}>Peso bruto: {item.weight} ton</Text>

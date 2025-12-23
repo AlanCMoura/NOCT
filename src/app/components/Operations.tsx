@@ -25,8 +25,8 @@ interface ListItemProps {
 }
 
 const STATUS_STYLES: Record<string, { background: string; text: string }> = {
-  andamento: { background: "#D1FAE5", text: "#047857" },
-  fechada: { background: "#E0E7FF", text: "#4338CA" },
+  aberta: { background: "rgba(250, 204, 21, 0.18)", text: "#92400E" },
+  fechada: { background: "rgba(34, 197, 94, 0.14)", text: "#047857" },
   default: { background: "#E5E7EB", text: "#374151" },
 };
 
@@ -37,8 +37,8 @@ const ListItem: React.FC<ListItemProps> = ({ data, onPress }) => {
     statusLabelRaw.includes("close") ||
     statusLabelRaw.includes("final") ||
     statusLabelRaw.includes("compl");
-  const statusLabel = isClosed ? "Fechada" : "Em andamento";
-  const normalizedStatus = isClosed ? "fechada" : "andamento";
+  const statusLabel = isClosed ? "Fechada" : "Aberta";
+  const normalizedStatus = isClosed ? "fechada" : "aberta";
   const statusTheme = STATUS_STYLES[normalizedStatus] ?? STATUS_STYLES.default;
   const trimmedOperationCode = data.operationCode?.trim() ?? "";
   const containerCount =

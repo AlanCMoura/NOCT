@@ -1034,7 +1034,6 @@ const fetchImagesByCategory = async (
       value: isEditing ? draftDetail?.code ?? "" : displayDetail.code ?? "-",
       editable: isEditing,
       onChange: isEditing ? (value: string) => updateDraft("code", value.trimStart()) : undefined,
-      placeholder: "Identificador (obrigatório)",
     },
     {
       key: "description",
@@ -1042,7 +1041,6 @@ const fetchImagesByCategory = async (
       value: isEditing ? draftDetail?.description ?? "" : displayDetail.description ?? "-",
       editable: isEditing,
       onChange: isEditing ? (value: string) => updateDraft("description", value) : undefined,
-      placeholder: "Descrição do container",
     },
     {
       key: "sacariaQuantity",
@@ -1050,7 +1048,6 @@ const fetchImagesByCategory = async (
       value: isEditing ? draftDetail?.sacariaQuantity ?? "" : displayDetail.sacariaQuantity ?? "-",
       editable: isEditing,
       onChange: isEditing ? (value: string) => updateDraft("sacariaQuantity", value) : undefined,
-      placeholder: "Ex: 300",
       keyboardType: "numeric",
     },
     {
@@ -1059,7 +1056,6 @@ const fetchImagesByCategory = async (
       value: isEditing ? draftDetail?.tare ?? "" : displayDetail.tare ?? "-",
       editable: isEditing,
       onChange: isEditing ? (value: string) => updateDraft("tare", value) : undefined,
-      placeholder: "Ex: 2.5",
       keyboardType: "numeric",
     },
     {
@@ -1068,7 +1064,6 @@ const fetchImagesByCategory = async (
       value: isEditing ? draftDetail?.netWeight ?? "" : displayDetail.netWeight ?? "-",
       editable: isEditing,
       onChange: isEditing ? (value: string) => updateDraft("netWeight", value) : undefined,
-      placeholder: "Ex: 25.0",
       keyboardType: "numeric",
     },
     {
@@ -1077,16 +1072,14 @@ const fetchImagesByCategory = async (
       value: isEditing ? draftDetail?.grossWeight ?? "" : displayDetail.grossWeight ?? "-",
       editable: isEditing,
       onChange: isEditing ? (value: string) => updateDraft("grossWeight", value) : undefined,
-      placeholder: "Ex: 27.5",
       keyboardType: "numeric",
     },
     {
       key: "sealAgency",
-      label: "Lacre Principal (agência)",
+      label: "Lacre Principal",
       value: isEditing ? draftDetail?.sealAgency ?? "" : displayDetail.sealAgency ?? "-",
       editable: isEditing,
       onChange: isEditing ? (value: string) => updateDraft("sealAgency", value) : undefined,
-      placeholder: "Código do lacre",
     },
     {
       key: "otherSeals",
@@ -1094,7 +1087,6 @@ const fetchImagesByCategory = async (
       value: isEditing ? draftDetail?.otherSeals ?? "" : displayDetail.otherSeals ?? "-",
       editable: isEditing,
       onChange: isEditing ? (value: string) => updateDraft("otherSeals", value) : undefined,
-      placeholder: "Ex: LAC1002, LAC1003",
     },
   ];
 
