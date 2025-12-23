@@ -47,7 +47,13 @@ type ContainerUpdateQueuePayload = ContainerCreateQueuePayload & {
   removedImages?: Array<{ apiCategory: string; ids: string[]; urls: string[] }>;
 };
 
-type PendingSummary = { id: number; type: string; label: string };
+type PendingSummary = {
+  id: number;
+  type: string;
+  label: string;
+  operationId?: string | number | null;
+  containerId?: string | number | null;
+};
 
 const OfflineOperationsContext = createContext<OfflineOperationsContextValue | undefined>(undefined);
 
@@ -84,6 +90,8 @@ export const OfflineOperationsProvider = ({ children }: { children: React.ReactN
           id: op.id,
           type: op.type,
           label: op.type?.includes("container") ? idText : `${op.type}:${idText}`,
+          operationId: opId,
+          containerId,
         };
       });
       setPendingSummaries(summaries);

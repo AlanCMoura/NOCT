@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Svg, Path } from "react-native-svg";
 import { cssInterop } from "nativewind";
 import { router, useLocalSearchParams, useFocusEffect } from "expo-router";
+import NetInfo from "@react-native-community/netinfo";
 import CustomStatusBar from "../components/StatusBar";
 import SacariaModal from "../components/SacariaModal";
 import type {
@@ -23,6 +24,7 @@ import type {
 } from "../../types/operation";
 import { API_BASE_URL } from "../../config/apiConfig";
 import { useAuthenticatedFetch } from "../contexts/_AuthContext";
+import { useOfflineOperations } from "../contexts/OfflineOperationsContext";
 
 cssInterop(View, { className: "style" });
 cssInterop(Text, { className: "style" });
@@ -169,6 +171,7 @@ const OperationDetails = () => {
   const idParam = Array.isArray(params.id) ? params.id[0] : params.id;
   const operationId = idParam ? decodeURIComponent(idParam) : undefined;
   const authFetch = useAuthenticatedFetch();
+  const { pendingSummaries, isSyncing, syncPendingOperations } = useOfflineOperations();
 
   const [detail, setDetail] = useState<ApiOperation | undefined>(undefined);
   const [loading, setLoading] = useState<boolean>(false);
@@ -181,11 +184,19 @@ const OperationDetails = () => {
   const [containers, setContainers] = useState<ApiContainer[]>([]);
   const [containersLoading, setContainersLoading] = useState<boolean>(false);
   const [sackImageIdMap, setSackImageIdMap] = useState<Record<string, number>>({});
+  const [isOffline, setIsOffline] = useState(false);
 
   const totalContainers = containers.length > 0 ? containers.length : detail?.containers?.length ?? 0;
   const sacariaImages = useMemo(() => normalizeSackImages(sacariaInfo?.images), [sacariaInfo?.images]);
   const imageCount = sacariaImages.length;
   const isOperationClosed = detail?.status?.toUpperCase() === "COMPLETED";
+  const pendingContainers = useMemo(
+    () =>
+      pendingSummaries.filter(
+        (p) => p.type?.includes("container") && operationId && String(p.operationId ?? "") === String(operationId)
+      ),
+    [pendingSummaries, operationId]
+  );
 
   const isLocalUri = (uri: string) =>
     typeof uri === "string" &&
@@ -391,6 +402,48 @@ const OperationDetails = () => {
     fetchOperation();
   }, [operationId]);
 
+  // Monitorar conectividade para exibir aviso e disparar sync quando voltar
+  useEffect(() => {
+    const init = async () => {
+      const state = await NetInfo.fetch();
+      const offline = !(state?.isConnected && state.isInternetReachable !== false);
+      setIsOffline(offline);
+      if (!offline) {
+        syncPendingOperations();
+      }
+    };
+    init();
+    const unsubscribe = NetInfo.addEventListener((state) => {
+      const offline = !(state?.isConnected && state.isInternetReachable !== false);
+      setIsOffline(offline);
+      if (!offline) {
+        syncPendingOperations();
+      }
+    });
+    return () => unsubscribe();
+  }, [syncPendingOperations]);
+
+  // Monitorar rede para exibir banner e disparar sync ao voltar
+  useEffect(() => {
+    const init = async () => {
+      const state = await NetInfo.fetch();
+      const offline = !(state?.isConnected && state.isInternetReachable !== false);
+      setIsOffline(offline);
+      if (!offline) {
+        syncPendingOperations();
+      }
+    };
+    init();
+    const unsub = NetInfo.addEventListener((state) => {
+      const offline = !(state?.isConnected && state.isInternetReachable !== false);
+      setIsOffline(offline);
+      if (!offline) {
+        syncPendingOperations();
+      }
+    });
+    return () => unsub();
+  }, [syncPendingOperations]);
+
   const handleEditOperationPress = () => {
     if (!operationInfo || isOperationClosed) return;
     setDraftOperationInfo({ ...operationInfo });
@@ -567,6 +620,21 @@ const OperationDetails = () => {
             )}
           </View>
         </View>
+
+        {isOffline && pendingContainers.length > 0 && (
+          <View style={styles.pendingBanner}>
+            <View style={styles.pendingBannerHeader}>
+              <ActivityIndicator size="small" color="#92400E" />
+              <Text style={styles.pendingBannerTitle}>Containers pendentes</Text>
+            </View>
+            <Text style={styles.pendingBannerText}>
+              {pendingContainers.map((p) => p.containerId ?? p.label).join(", ")}
+            </Text>
+            {isSyncing && (
+              <Text style={styles.pendingBannerSync}>Sincronizando quando a conexão voltar...</Text>
+            )}
+          </View>
+        )}
 
         <ScrollView
           className="flex-1"
@@ -822,6 +890,35 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "700",
     color: "#2A2E40",
+  },
+  pendingBanner: {
+    marginHorizontal: 24,
+    marginTop: 12,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: "rgba(251, 191, 36, 0.18)",
+    borderWidth: 1,
+    borderColor: "rgba(234, 179, 8, 0.5)",
+    gap: 4,
+  },
+  pendingBannerHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  pendingBannerTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#92400E",
+  },
+  pendingBannerText: {
+    fontSize: 13,
+    color: "#92400E",
+  },
+  pendingBannerSync: {
+    fontSize: 12,
+    color: "#92400E",
+    opacity: 0.8,
   },
   editButton: {
     paddingHorizontal: 14,

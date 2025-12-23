@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState, useCallback } from "react";
+﻿import React, { useEffect, useState, useCallback, useMemo } from "react";
 import {
   View,
   Text,
@@ -206,6 +206,7 @@ const ContainerDetails = () => {
   const authFetch = useAuthenticatedFetch();
   const {
     pendingSummaries,
+    isSyncing,
     syncPendingOperations,
     queueContainerCreate,
     queueContainerUpdate,
@@ -446,6 +447,18 @@ const fetchImagesByCategory = async (
   const statusInfo = STATUS_MAP[safeStatus] ?? STATUS_MAP["Aberto"];
   const isContainerCompleted = displayDetail?.status === "Completo";
 
+  const targetOperationId = operationIdParam ?? displayDetail?.operationCode;
+  const pendingContainers = useMemo(
+    () =>
+      pendingSummaries.filter((op) => {
+        if (!op.type?.includes("container")) return false;
+        if (!targetOperationId) return true;
+        return String(op.operationId ?? op.label ?? op.id ?? "") === String(targetOperationId);
+      }),
+    [pendingSummaries, targetOperationId]
+  );
+  const pendingIds = pendingContainers.map((op) => op.containerId ?? op.label ?? String(op.id));
+
   // Handlers de edição
   const handleCompleteToggle = (value: boolean) => {
     if (!value || isContainerCompleted || saving) return;
@@ -556,6 +569,18 @@ const fetchImagesByCategory = async (
     return uri.startsWith("file://") || uri.startsWith("content://");
   };
 
+  const navigateToOperation = (operationIdValue?: string | number) => {
+    if (router.canGoBack?.()) {
+      router.back();
+      return;
+    }
+    if (!operationIdValue) return;
+    router.replace({
+      pathname: "/main/OperationDetails",
+      params: { id: encodeURIComponent(String(operationIdValue)) },
+    });
+  };
+
   // Salvar edição
   const handleEditSave = async () => {
     if (!draftDetail || saving) return;
@@ -589,6 +614,9 @@ const fetchImagesByCategory = async (
 
       const resolvedOperationId = operationIdParam ?? displayDetail?.operationCode ?? "";
       const resolvedOperationIdNumber = Number(resolvedOperationId);
+      const resolvedOperationNav = Number.isNaN(resolvedOperationIdNumber)
+        ? resolvedOperationId
+        : resolvedOperationIdNumber;
 
       const payload = {
         containerId: resolvedId,
@@ -649,7 +677,8 @@ const fetchImagesByCategory = async (
           setIsEditing(false);
           Alert.alert(
             "Sem conexao",
-            "Container salvo localmente e sera enviado quando a conexao voltar."
+            "Container salvo localmente e sera enviado quando a conexao voltar.",
+            [{ text: "OK", onPress: () => navigateToOperation(resolvedOperationNav) }]
           );
         } else if (containerId) {
           await queueContainerUpdate({
@@ -667,7 +696,8 @@ const fetchImagesByCategory = async (
           setIsEditing(false);
           Alert.alert(
             "Sem conexao",
-            "Atualizacao do container foi salva localmente e sera enviada quando a conexao voltar."
+            "Atualizacao do container foi salva localmente e sera enviada quando a conexao voltar.",
+            [{ text: "OK", onPress: () => navigateToOperation(resolvedOperationNav) }]
           );
         } else {
           Alert.alert("Erro", "Container nao encontrado para salvar offline.");
@@ -1074,9 +1104,6 @@ const fetchImagesByCategory = async (
     infoFields.filter((field) => !leftColumnKeys.includes(field.key)),
   ];
 
-  const pendingContainers = pendingSummaries.filter((op) => op.type?.includes("container"));
-  const pendingIds = pendingContainers.map((op) => op.label ?? String(op.id));
-
   const headerPaddingTop = Math.max(insets.top, 12) + 12;
   const slideWidth = Math.max((SCREEN_WIDTH - CAROUSEL_ITEM_SPACING) / 1.5, 220);
   const snapInterval = slideWidth + CAROUSEL_ITEM_SPACING;
@@ -1183,10 +1210,16 @@ const fetchImagesByCategory = async (
         </View>
 
         {/* Conteúdo */}
-        {isOffline && pendingIds.length > 0 && (
-          <View style={styles.offlineBanner}>
-            <Text style={styles.offlineBannerTitle}>Containers pendentes</Text>
-            <Text style={styles.offlineBannerText}>{pendingIds.join(", ")}</Text>
+        {isOffline && pendingContainers.length > 0 && (
+          <View style={styles.pendingBanner}>
+            <View style={styles.pendingBannerHeader}>
+              <ActivityIndicator size="small" color="#92400E" />
+              <Text style={styles.pendingBannerTitle}>Aguardando conexão. Containers pendentes:</Text>
+            </View>
+            <Text style={styles.pendingBannerText}>{pendingIds.join(", ")}</Text>
+            {isSyncing && (
+              <Text style={styles.pendingBannerSync}>Sincronizando quando a conexão voltar...</Text>
+            )}
           </View>
         )}
 
@@ -1415,25 +1448,33 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#6D7380",
   },
-  offlineBanner: {
+  pendingBanner: {
     marginHorizontal: 24,
     marginTop: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
+    padding: 12,
     borderRadius: 12,
-    backgroundColor: "rgba(73, 197, 182, 0.15)",
+    backgroundColor: "rgba(251, 191, 36, 0.18)",
     borderWidth: 1,
-    borderColor: "rgba(73, 197, 182, 0.35)",
+    borderColor: "rgba(234, 179, 8, 0.5)",
+    gap: 4,
   },
-  offlineBannerTitle: {
+  pendingBannerHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  pendingBannerTitle: {
     fontSize: 14,
     fontWeight: "700",
-    color: "#0F766E",
-    marginBottom: 4,
+    color: "#92400E",
   },
-  offlineBannerText: {
+  pendingBannerText: {
     fontSize: 13,
-    color: "#0F766E",
+    color: "#92400E",
+  },
+  pendingBannerSync: {
+    fontSize: 12,
+    color: "#92400E",
   },
   statusChip: {
     paddingHorizontal: 14,
