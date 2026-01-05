@@ -51,6 +51,15 @@ const ListItem: React.FC<ListItemProps> = ({ data, onPress }) => {
         : trimmedOperationCode.length > 0
           ? trimmedOperationCode
           : "Operacao";
+  const idLabel =
+    Number.isFinite(data.operationId) && data.operationId !== null && data.operationId !== undefined
+      ? `ID: ${data.operationId}`
+      : "";
+  const formattedDate = data.createdAt
+    ? new Date(data.createdAt).toLocaleString("pt-BR")
+    : "—";
+  const vesselLabel =
+    data.vessel && data.vessel.trim().length > 0 ? data.vessel.trim() : "—";
 
   return (
     <TouchableOpacity
@@ -83,7 +92,30 @@ const ListItem: React.FC<ListItemProps> = ({ data, onPress }) => {
             >
               {operationLabel}
             </Text>
-      </View>
+            {idLabel ? (
+              <Text className="text-xs mt-1 font-semibold" style={{ color: "#6B7280" }}>
+                {idLabel}
+              </Text>
+            ) : null}
+            <View className="mt-3">
+              <View className="flex-row justify-between">
+                <Text className="text-xs font-semibold" style={{ color: "#94A3B8" }}>
+                  Criada
+                </Text>
+                <Text className="text-xs font-semibold" style={{ color: "#94A3B8" }}>
+                  Navio
+                </Text>
+              </View>
+              <View className="flex-row justify-between mt-1">
+                <Text className="text-sm font-semibold" style={{ color: "#1F2937" }}>
+                  {formattedDate}
+                </Text>
+                <Text className="text-sm font-semibold" style={{ color: "#1F2937" }}>
+                  {vesselLabel}
+                </Text>
+              </View>
+            </View>
+          </View>
           <View
             className="px-3 py-1 rounded-full"
             style={{ backgroundColor: statusTheme.background }}

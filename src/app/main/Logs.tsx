@@ -4,7 +4,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Svg, Path } from 'react-native-svg';
 import { cssInterop } from 'nativewind';
 import ListItem, { OperationCardData } from "../components/Operations";
-import FilterButton from '../components/Filter';
 import Sidebar from '../components/Sidebar';
 import { router } from 'expo-router';
 import { useAuth, useAuthenticatedFetch } from '../contexts/_AuthContext';
@@ -19,8 +18,11 @@ cssInterop(ScrollView, { className: 'style' });
 cssInterop(SafeAreaView, { className: 'style' });
 cssInterop(Animated.View, { className: 'style' });
 
-// Define o tipo para search field
-type SearchField = 'id' | 'containerId';
+type FetchOperationsOptions = {
+  showLoadingIndicator?: boolean;
+  queryText?: string;
+  operationId?: number;
+};
 
 type ApiUser = {
   id?: number;
@@ -44,6 +46,7 @@ type ApiContainer = {
 type ApiOperation = {
   id?: number;
   ctv?: string;
+  vessel?: string;
   status?: string;
   createdAt?: string;
   user?: ApiUser;
@@ -63,11 +66,11 @@ interface OperationItem {
   status?: string;
   containerCount?: number;
   ctv?: string;
+  vessel?: string;
 }
 
 // Configuração da API
 export default function Logs() {
-  const [searchField, setSearchField] = useState<SearchField>('containerId');
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(false);
   const translateX = useRef(new Animated.Value(-256)).current;
   const overlayOpacity = useRef(new Animated.Value(0)).current;
@@ -77,6 +80,7 @@ export default function Logs() {
   const [filteredOperations, setFilteredOperations] = useState<OperationItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
+  const latestFetchIdRef = useRef<number>(0);
   
   // Hooks de autenticação
   const { isAuthenticated } = useAuth();
@@ -150,6 +154,15 @@ export default function Logs() {
       qtde_fotos: safeImages.length || sackImageList.length,
       containerCount,
       ctv,
+      vessel:
+        (apiResponse as any)?.vessel ??
+        (apiResponse as any)?.vesselName ??
+        (apiResponse as any)?.shipName ??
+        (apiResponse as any)?.ship ??
+        (apiResponse.container as any)?.vessel ??
+        (apiResponse.container as any)?.ship ??
+        normalizedContainer?.description ??
+        undefined,
     };
 
     return mappedData;
@@ -169,6 +182,12 @@ export default function Logs() {
       item.container?.containerId ||
       item.container?.code ||
       (item.id ? `OP-${item.id}` : 'Operacao');
+    const vesselName =
+      item.vessel ||
+      (item.container as any)?.vessel ||
+      (item.container as any)?.ship ||
+      item.container?.description ||
+      undefined;
 
     return {
       operationId: item.id,
@@ -180,7 +199,7 @@ export default function Logs() {
         (item.container as any)?.ctv ||
         '',
       reservation: item.container?.description || undefined,
-      vessel: undefined,
+      vessel: vesselName,
       createdAt: item.createdAt,
       status: statusLabel,
       photoCount: item.qtde_fotos,
@@ -192,7 +211,34 @@ export default function Logs() {
     };
   };
 
-  const fetchOperations = async (showLoadingIndicator = true) => {
+  const filterOperationsByQuery = (
+    list: OperationItem[],
+    query: string | undefined,
+  ) => {
+    const normalizedQuery = query?.trim().toLowerCase();
+    if (!normalizedQuery) return list;
+
+    return list.filter((item) => {
+      const searchValue = item.id.toString();
+      const operationFormat = `OP-${item.id}`;
+      return (
+        searchValue.includes(normalizedQuery) ||
+        operationFormat.toLowerCase().includes(normalizedQuery)
+      );
+    });
+  };
+
+  const fetchOperations = async ({
+    showLoadingIndicator = true,
+    queryText,
+    operationId,
+  }: FetchOperationsOptions = {}) => {
+    const fetchId = ++latestFetchIdRef.current;
+    const trimmedQuery = queryText?.trim();
+    const baseSize =
+      Number.isFinite(operationId) ? 1 : trimmedQuery && trimmedQuery.length > 0 ? 50 : 51;
+    const queryParams = ['page=0', `size=${baseSize}`, 'sortBy=id', 'sortDirection=DESC'];
+
     if (showLoadingIndicator) {
       setLoading(true);
     }
@@ -223,29 +269,61 @@ export default function Logs() {
     };
 
     try {
-      const response = await authenticatedFetch(
-        `${API_BASE_URL}/operations?page=0&size=50&sort=id,DESC`,
-      );
+      let response: Response;
+
+      if (Number.isFinite(operationId)) {
+        response = await authenticatedFetch(
+          `${API_BASE_URL}/operations/${operationId}`,
+        );
+      } else {
+        response = await authenticatedFetch(
+          `${API_BASE_URL}/operations?${queryParams.join('&')}`,
+        );
+      }
 
       if (!response.ok) {
-        const message = `Erro ${response.status} ao buscar operações`;
-        console.error('[Logs] Falha na API de operações:', message);
-        Alert.alert('Erro', message);
-        return;
+        if (response.status === 404) {
+          if (fetchId === latestFetchIdRef.current) {
+            setOperations([]);
+            setFilteredOperations([]);
+            setLoading(false);
+            setRefreshing(false);
+          }
+          return;
+        } else {
+          const message = `Erro ${response.status} ao buscar operações`;
+          console.error('[Logs] Falha na API de operações:', message);
+          if (Number.isFinite(operationId)) {
+            setOperations([]);
+            setFilteredOperations([]);
+          }
+          Alert.alert('Erro', message);
+          return;
+        }
       }
 
       const data = await response.json();
-      const content: ApiOperation[] = Array.isArray(data?.content)
-        ? data.content
-        : Array.isArray(data)
-          ? data
-          : [];
+      const content: ApiOperation[] = Number.isFinite(operationId)
+        ? (data ? [data as ApiOperation] : [])
+        : Array.isArray(data?.content)
+          ? data.content
+          : Array.isArray(data)
+            ? data
+            : [];
 
       const mappedOperations = content
         .map(mapOperationData)
-        .filter((item) => Number.isFinite(item.id) && item.id !== 0);
+        .filter((item) => Number.isFinite(item.id) && item.id !== 0)
+        .sort((a, b) => (b.id || 0) - (a.id || 0)); // garante ordem do maior ID para o menor
+
+      if (fetchId !== latestFetchIdRef.current) {
+        return;
+      }
+
+      const filteredList = filterOperationsByQuery(mappedOperations, trimmedQuery);
+
       setOperations(mappedOperations);
-      setFilteredOperations(mappedOperations);
+      setFilteredOperations(filteredList);
 
       const missingCounts = mappedOperations.filter(
         (item) => item.containerCount === undefined || item.containerCount === null,
@@ -268,45 +346,21 @@ export default function Logs() {
       console.error('[Logs] Erro ao carregar operações da API:', error);
       Alert.alert('Erro', 'Não foi possível carregar as operações.');
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (fetchId === latestFetchIdRef.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   };
 
-  // Efeito para buscar operações quando o componente for montado
+  // Carrega lista padrão (50 maiores IDs) quando não há busca digitada
   useEffect(() => {
-    if (isAuthenticated) {
+    if (!isAuthenticated) return;
+    const trimmed = searchText.trim();
+    if (trimmed.length === 0) {
       fetchOperations();
     }
-  }, [isAuthenticated]);
-
-  // Efeito para filtrar lista baseado no texto de busca
-  useEffect(() => {
-    if (searchText === '') {
-      setFilteredOperations(operations);
-    } else {
-      const filtered = operations.filter((item) => {
-        if (searchField === 'id') {
-          // Busca pelo ID (tanto o número quanto o formato OP-XXX)
-          const searchValue = item.id.toString();
-          const operationFormat = `OP-${item.id}`;
-          return searchValue.includes(searchText) || 
-                 operationFormat.toLowerCase().includes(searchText.toLowerCase());
-        } else if (searchField === 'containerId') {
-          const searchValue =
-            item.ctv ||
-            item.container?.id ||
-            (item.container as any)?.ctv ||
-            (item.container as any)?.containerId ||
-            '';
-          return searchValue.toLowerCase().includes(searchText.toLowerCase());
-        }
-        
-        return false;
-      });
-      setFilteredOperations(filtered);
-    }
-  }, [searchText, searchField, operations]);
+  }, [isAuthenticated, searchText]);
   
   // Inicialização do sidebar
   useEffect(() => {
@@ -316,8 +370,26 @@ export default function Logs() {
 
   // Função para refresh manual
   const onRefresh = () => {
+    if (!isAuthenticated) return;
     setRefreshing(true);
-    fetchOperations(false);
+    const trimmed = searchText.trim();
+    const isIdSearch = /^\d+$/.test(trimmed);
+    fetchOperations({
+      showLoadingIndicator: false,
+      queryText: isIdSearch ? trimmed : undefined,
+      operationId: isIdSearch ? Number(trimmed) : undefined,
+    });
+  };
+
+  const handleSearch = () => {
+    if (!isAuthenticated) return;
+    const trimmed = searchText.trim();
+    const isIdSearch = /^\d+$/.test(trimmed);
+    setLoading(true);
+    fetchOperations({
+      queryText: trimmed || undefined,
+      operationId: isIdSearch ? Number(trimmed) : undefined,
+    });
   };
   
   /* sidebar effect */
@@ -456,7 +528,9 @@ export default function Logs() {
         {/* Search Bar */}
         <View className="px-6 mt-6 w-full flex-row items-center">
           <TextInput
-            placeholder={`Pesquise por ${searchField === 'id' ? 'ID da operação' : 'CTV do container'}`}
+            placeholder={
+              'Pesquise por ID da operação'
+            }
             placeholderTextColor="#6D7380"
             value={searchText}
             onChangeText={setSearchText}
@@ -474,12 +548,25 @@ export default function Logs() {
             editable={!loading}
             selectionColor="#49C5B6"
           />
-          <View className="ml-1">
-            <FilterButton
-              onFilterChange={setSearchField}
-              currentFilterField={searchField}
-            />
-          </View>
+          <TouchableOpacity
+            className="px-4 py-2 rounded-lg"
+            onPress={handleSearch}
+            disabled={loading}
+            style={{
+              backgroundColor: loading ? '#A7DCD5' : '#49C5B6',
+              minWidth: 90,
+              alignItems: 'center',
+              justifyContent: 'center',
+              height: 44,
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 1 },
+              shadowOpacity: 0.1,
+              shadowRadius: 2,
+              elevation: 2,
+            }}
+          >
+            <Text style={{ color: '#FFFFFF', fontWeight: '700' }}>Buscar</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Lista */}
