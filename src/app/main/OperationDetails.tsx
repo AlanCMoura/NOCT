@@ -25,21 +25,13 @@ import type {
 import { API_BASE_URL } from "../../config/apiConfig";
 import { useAuthenticatedFetch } from "../contexts/_AuthContext";
 import { useOfflineOperations } from "../contexts/OfflineOperationsContext";
+import { formatDate } from "../utils/dateUtils";
 
 cssInterop(View, { className: "style" });
 cssInterop(Text, { className: "style" });
 cssInterop(SafeAreaView, { className: "style" });
 cssInterop(ScrollView, { className: "style" });
 cssInterop(TouchableOpacity, { className: "style" });
-
-const formatDate = (value: string | Date | undefined | null): string => {
-  if (!value) return "-";
-  const date = typeof value === "string" ? new Date(value) : value;
-  if (Number.isNaN(date.getTime())) {
-    return typeof value === "string" ? value : "-";
-  }
-  return Intl.DateTimeFormat("pt-BR", { dateStyle: "medium" }).format(date);
-};
 
 const normalizeDateInput = (value: string): string => {
   const digits = value.replace(/\D/g, "").slice(0, 8);

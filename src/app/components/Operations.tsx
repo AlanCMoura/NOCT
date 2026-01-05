@@ -1,6 +1,7 @@
 import React from "react";
 import { View, Text, TouchableOpacity } from "react-native";
 import { cssInterop } from "nativewind";
+import { formatDateTime } from "../utils/dateUtils";
 
 cssInterop(View, { className: "style" });
 cssInterop(Text, { className: "style" });
@@ -55,9 +56,7 @@ const ListItem: React.FC<ListItemProps> = ({ data, onPress }) => {
     Number.isFinite(data.operationId) && data.operationId !== null && data.operationId !== undefined
       ? `ID: ${data.operationId}`
       : "";
-  const formattedDate = data.createdAt
-    ? new Date(data.createdAt).toLocaleString("pt-BR")
-    : "—";
+  const formattedDate = formatDateTime(data.createdAt);
   const vesselLabel =
     data.vessel && data.vessel.trim().length > 0 ? data.vessel.trim() : "—";
 

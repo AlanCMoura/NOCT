@@ -32,6 +32,7 @@ import * as ImagePicker from "expo-image-picker";
 import { useAuthenticatedFetch } from "../contexts/_AuthContext";
 import { useOfflineOperations } from "../contexts/OfflineOperationsContext";
 import { API_BASE_URL } from "../../config/apiConfig";
+import { formatDate } from "../utils/dateUtils";
 
 cssInterop(View, { className: "style" });
 cssInterop(Text, { className: "style" });
@@ -50,13 +51,6 @@ const BACK_CAMERA_PICKER_OPTIONS: ImagePicker.ImagePickerOptions = {
   mediaTypes: "images",
   quality: 0.7,
   cameraType: ImagePicker.CameraType.back, // regra: sempre abrir com a câmera traseira
-};
-
-const formatDate = (value: string) => {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return Intl.DateTimeFormat("pt-BR", { dateStyle: "medium" }).format(date);
 };
 
 const STATUS_MAP: Record<ContainerStatus, { label: string; color: string; background: string }> = {
